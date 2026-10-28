@@ -1,0 +1,45 @@
+{
+  "name": "tripmates",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Private family trip planning and expense manager (financial core + schema + Express API + React Vite frontend).",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "tsx --test backend/tests/*.test.ts",
+    "typecheck": "tsc -p backend/tsconfig.json && tsc -p frontend/tsconfig.json",
+    "typecheck:backend": "tsc -p backend/tsconfig.json",
+    "typecheck:frontend": "tsc -p frontend/tsconfig.json",
+    "build": "vite build",
+    "dev": "tsx backend/src/index.ts",
+    "start": "tsx backend/src/index.ts",
+    "setup-admin": "tsx backend/src/cli/setup-admin.ts",
+    "package": "tsx backend/src/cli/package-app.ts"
+  },
+  "devDependencies": {
+    "@types/cookie-parser": "^1.4.10",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/leaflet": "^1.9.22",
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vite": "^8.3.5"
+  },
+  "dependencies": {
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.9",
+    "express": "^5.3.0",
+    "leaflet": "^1.9.4",
+    "lucide-react": "^1.61.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-leaflet": "^5.0.0",
+    "zod": "^4.6.7"
+  }
+}
