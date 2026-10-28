@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useI18n } from '../i18n/context';
 import { api } from '../api/client';
 import {
@@ -14,6 +14,7 @@ import {
   Sparkles,
   AlertCircle,
   X,
+  HeartHandshake,
 } from 'lucide-react';
 
 interface Family {
@@ -160,6 +161,44 @@ export const TripCreationModal: React.FC<Props> = ({
       (p.family_name && p.family_name.toLowerCase().includes(q))
     );
   });
+
+  // Group filtered persons by family
+  const groupedPersons = useMemo(() => {
+    const familiesMap = new Map<string, { familyId: number | null; familyName: string; members: any[] }>();
+    const individualMembers: any[] = [];
+
+    filteredPersons.forEach(person => {
+      if (person.family_name) {
+        const key = `fam_${person.family_id || person.family_name}`;
+        if (!familiesMap.has(key)) {
+          familiesMap.set(key, {
+            familyId: person.family_id ?? null,
+            familyName: person.family_name,
+            members: [],
+          });
+        }
+        familiesMap.get(key)!.members.push(person);
+      } else {
+        individualMembers.push(person);
+      }
+    });
+
+    return {
+      families: Array.from(familiesMap.values()),
+      individuals: individualMembers,
+    };
+  }, [filteredPersons]);
+
+  const toggleFamilyGroup = (members: any[]) => {
+    const memberIds = members.map(m => m.id);
+    const allSelected = memberIds.every(id => selectedPersonIds.includes(id));
+
+    if (allSelected) {
+      setSelectedPersonIds(prev => prev.filter(id => !memberIds.includes(id)));
+    } else {
+      setSelectedPersonIds(prev => Array.from(new Set([...prev, ...memberIds])));
+    }
+  };
 
   return (
     <div className="modal-overlay" style={{ zIndex: 1200 }}>
@@ -460,87 +499,206 @@ export const TripCreationModal: React.FC<Props> = ({
               />
             </div>
 
-            {/* Member cards grid */}
+            {/* Family Groups & Individual Member Cards */}
             <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))',
-              gap: '0.65rem',
-              maxHeight: '220px',
+              maxHeight: '260px',
               overflowY: 'auto',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.85rem',
               paddingRight: '4px',
             }}>
-              {filteredPersons.map(p => {
-                const isSelected = selectedPersonIds.includes(p.id);
+              {groupedPersons.families.map(fam => {
+                const memberIds = fam.members.map(m => m.id);
+                const allSelected = memberIds.every(id => selectedPersonIds.includes(id));
+
                 return (
                   <div
-                    key={p.id}
-                    onClick={() => togglePerson(p.id)}
+                    key={fam.familyName}
                     style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '0.6rem 0.85rem',
-                      borderRadius: '10px',
-                      background: isSelected ? '#ffffff' : '#f1f5f9',
-                      border: isSelected ? '1.5px solid #0f172a' : '1px solid #e2e8f0',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s ease',
-                      boxShadow: isSelected ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
+                      background: '#ffffff',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '12px',
+                      padding: '0.85rem',
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', minWidth: 0 }}>
-                      <div style={{
-                        width: '32px',
-                        height: '32px',
-                        borderRadius: '50%',
-                        background: isSelected ? '#0f172a' : '#cbd5e1',
-                        color: isSelected ? '#ffffff' : '#475569',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontWeight: 700,
-                        fontSize: '0.85rem',
-                        flexShrink: 0,
-                      }}>
-                        {p.display_name.charAt(0).toUpperCase()}
+                    {/* Family Header */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.5rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                        <HeartHandshake size={16} style={{ color: '#0f172a' }} />
+                        <span style={{ fontSize: '0.88rem', fontWeight: 700, color: '#0f172a' }}>
+                          {fam.familyName}
+                        </span>
+                        <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                          ({fam.members.length} member{fam.members.length > 1 ? 's' : ''})
+                        </span>
                       </div>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{
-                          fontWeight: 700,
-                          fontSize: '0.85rem',
-                          color: '#0f172a',
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                        }}>
-                          {p.display_name}
-                        </div>
-                        {p.family_name && (
-                          <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
-                            {p.family_name}
-                          </div>
-                        )}
-                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => toggleFamilyGroup(fam.members)}
+                        style={{
+                          background: allSelected ? '#f1f5f9' : '#0f172a',
+                          color: allSelected ? '#0f172a' : '#ffffff',
+                          border: 'none',
+                          padding: '0.25rem 0.65rem',
+                          borderRadius: '6px',
+                          fontSize: '0.72rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {allSelected ? 'Deselect Family' : 'Invite Entire Family'}
+                      </button>
                     </div>
 
-                    <div style={{
-                      width: '20px',
-                      height: '20px',
-                      borderRadius: '6px',
-                      border: isSelected ? '1px solid #0f172a' : '1px solid #cbd5e1',
-                      background: isSelected ? '#0f172a' : '#ffffff',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: '#ffffff',
-                      flexShrink: 0,
-                      marginLeft: '0.5rem',
-                    }}>
-                      {isSelected && <Check size={14} />}
+                    {/* Member Cards Grid */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.5rem' }}>
+                      {fam.members.map(p => {
+                        const isSelected = selectedPersonIds.includes(p.id);
+                        return (
+                          <div
+                            key={p.id}
+                            onClick={() => togglePerson(p.id)}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '0.5rem 0.75rem',
+                              borderRadius: '8px',
+                              background: isSelected ? '#ffffff' : '#f8fafc',
+                              border: isSelected ? '1.5px solid #0f172a' : '1px solid #e2e8f0',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s ease',
+                              boxShadow: isSelected ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', minWidth: 0 }}>
+                              <div style={{
+                                width: '28px',
+                                height: '28px',
+                                borderRadius: '50%',
+                                background: isSelected ? '#0f172a' : '#cbd5e1',
+                                color: isSelected ? '#ffffff' : '#475569',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontWeight: 700,
+                                fontSize: '0.78rem',
+                                flexShrink: 0,
+                              }}>
+                                {p.display_name.charAt(0).toUpperCase()}
+                              </div>
+                              <div style={{ minWidth: 0 }}>
+                                <div style={{
+                                  fontWeight: 700,
+                                  fontSize: '0.82rem',
+                                  color: '#0f172a',
+                                  whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                }}>
+                                  {p.display_name}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div style={{
+                              width: '18px',
+                              height: '18px',
+                              borderRadius: '4px',
+                              border: isSelected ? '1px solid #0f172a' : '1px solid #cbd5e1',
+                              background: isSelected ? '#0f172a' : '#ffffff',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: '#ffffff',
+                              flexShrink: 0,
+                            }}>
+                              {isSelected && <Check size={12} />}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 );
               })}
+
+              {/* Individuals */}
+              {groupedPersons.individuals.length > 0 && (
+                <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '0.85rem' }}>
+                  <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#0f172a', marginBottom: '0.65rem', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.5rem' }}>
+                    Individual Members ({groupedPersons.individuals.length})
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.5rem' }}>
+                    {groupedPersons.individuals.map(p => {
+                      const isSelected = selectedPersonIds.includes(p.id);
+                      return (
+                        <div
+                          key={p.id}
+                          onClick={() => togglePerson(p.id)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '0.5rem 0.75rem',
+                            borderRadius: '8px',
+                            background: isSelected ? '#ffffff' : '#f8fafc',
+                            border: isSelected ? '1.5px solid #0f172a' : '1px solid #e2e8f0',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', minWidth: 0 }}>
+                            <div style={{
+                              width: '28px',
+                              height: '28px',
+                              borderRadius: '50%',
+                              background: isSelected ? '#0f172a' : '#cbd5e1',
+                              color: isSelected ? '#ffffff' : '#475569',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontWeight: 700,
+                              fontSize: '0.78rem',
+                              flexShrink: 0,
+                            }}>
+                              {p.display_name.charAt(0).toUpperCase()}
+                            </div>
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{
+                                fontWeight: 700,
+                                fontSize: '0.82rem',
+                                color: '#0f172a',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                              }}>
+                                {p.display_name}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div style={{
+                            width: '18px',
+                            height: '18px',
+                            borderRadius: '4px',
+                            border: isSelected ? '1px solid #0f172a' : '1px solid #cbd5e1',
+                            background: isSelected ? '#0f172a' : '#ffffff',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: '#ffffff',
+                            flexShrink: 0,
+                          }}>
+                            {isSelected && <Check size={12} />}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

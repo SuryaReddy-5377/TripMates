@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useI18n } from '../i18n/context';
 import { NatureLogo } from './NatureBanners';
-import { LogOut, Globe, Shield, Home, Users, Compass, MapPinned, ShieldAlert } from 'lucide-react';
+import { LogOut, Globe, Shield, Home, Users, Compass, MapPinned, ShieldAlert, User } from 'lucide-react';
 import { NotificationCenter } from './NotificationCenter';
+import { ProfileModal } from './ProfileModal';
 
 interface Props {
   user: any;
@@ -24,6 +25,7 @@ export const Navbar: React.FC<Props> = ({
   onSelectTrip,
 }) => {
   const { language, setLanguage, t } = useI18n();
+  const [showProfileModal, setShowProfileModal] = useState(false);
 
   return (
     <nav style={{
@@ -166,7 +168,7 @@ export const Navbar: React.FC<Props> = ({
             </button>
           </div>
 
-          {/* User Profile Pill */}
+          {/* User Profile Pill & Trigger */}
           <div style={{
             display: 'flex',
             alignItems: 'center',
@@ -178,14 +180,42 @@ export const Navbar: React.FC<Props> = ({
             border: '1px solid #e2e8f0',
             boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
           }}>
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#0f172a' }}>
-                {person?.display_name || user.email.split('@')[0]}
+            <button
+              type="button"
+              onClick={() => setShowProfileModal(true)}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                textAlign: 'right',
+                padding: 0,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.45rem',
+              }}
+              title="View & Edit Family Profile"
+            >
+              <div style={{
+                width: '26px',
+                height: '26px',
+                borderRadius: '50%',
+                background: '#f1f5f9',
+                color: '#0f172a',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
+                <User size={14} />
               </div>
-              <div style={{ fontSize: '0.68rem', color: '#64748b', textTransform: 'capitalize' }}>
-                {user.role.replace('_', ' ')}
+              <div>
+                <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#0f172a' }}>
+                  {person?.display_name || user.email.split('@')[0]}
+                </div>
+                <div style={{ fontSize: '0.68rem', color: '#64748b', textTransform: 'capitalize' }}>
+                  {family ? family.name : user.role.replace('_', ' ')}
+                </div>
               </div>
-            </div>
+            </button>
             <button
               type="button"
               onClick={onLogout}
@@ -207,6 +237,13 @@ export const Navbar: React.FC<Props> = ({
           </div>
         </div>
       </div>
+
+      {showProfileModal && (
+        <ProfileModal
+          onClose={() => setShowProfileModal(false)}
+          onProfileUpdated={() => window.location.reload()}
+        />
+      )}
     </nav>
   );
 };

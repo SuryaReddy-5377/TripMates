@@ -35,6 +35,8 @@ const updateTripSchema = z.object({
   budget_paise: z.number().int().nonnegative().optional().nullable(),
   status: z.enum(['planning', 'upcoming', 'ongoing', 'completed']).optional(),
   is_private: z.union([z.boolean(), z.number()]).optional(),
+  participant_person_ids: z.array(z.number().int().positive()).optional(),
+  family_ids: z.array(z.number().int().positive()).optional(),
 });
 
 // GET /api/trips - Scoped list of accessible trips
@@ -246,27 +248,89 @@ tripsRouter.patch('/:tripId', requireAuth, requireTripAccess('tripId'), (req: Re
   const updatedPrivate = data.is_private !== undefined ? (Boolean(data.is_private) ? 1 : 0) : trip.is_private;
   const completedAt = updatedStatus === 'completed' && !trip.completed_at ? new Date().toISOString() : trip.completed_at;
 
-  req.db.prepare(`
-    UPDATE trips
-    SET name = ?, destination = ?, start_date = ?, end_date = ?, description = ?, notes = ?,
-        cover_image = ?, budget_paise = ?, status = ?, is_private = ?, completed_at = ?
-    WHERE id = ?
-  `).run(
-    updatedName,
-    updatedDest,
-    updatedStart,
-    updatedEnd,
-    updatedDesc,
-    updatedNotes,
-    updatedCoverImage,
-    budgetPaise,
-    updatedStatus,
-    updatedPrivate,
-    completedAt,
-    trip.id
-  );
+  withTransaction(req.db, () => {
+    req.db.prepare(`
+      UPDATE trips
+      SET name = ?, destination = ?, start_date = ?, end_date = ?, description = ?, notes = ?,
+          cover_image = ?, budget_paise = ?, status = ?, is_private = ?, completed_at = ?
+      WHERE id = ?
+    `).run(
+      updatedName,
+      updatedDest,
+      updatedStart,
+      updatedEnd,
+      updatedDesc,
+      updatedNotes,
+      updatedCoverImage,
+      budgetPaise,
+      updatedStatus,
+      updatedPrivate,
+      completedAt,
+      trip.id
+    );
 
-  recordAuditLog(req.db, req.user!.id, 'UPDATE_TRIP', 'trips', trip.id, trip, { name: updatedName, status: updatedStatus, isPrivate: updatedPrivate });
+    // If new families provided, insert them and their members
+    if (data.family_ids && data.family_ids.length > 0) {
+      for (const famId of data.family_ids) {
+        req.db.prepare(`
+          INSERT OR IGNORE INTO trip_families (trip_id, family_id)
+          VALUES (?, ?)
+        `).run(trip.id, famId);
+
+        const members = req.db.prepare(`
+          SELECT person_id FROM family_memberships
+          WHERE family_id = ? AND left_at IS NULL
+        `).all(famId) as Array<{ person_id: number }>;
+
+        for (const m of members) {
+          const existing = req.db.prepare(`
+            SELECT id FROM trip_participants WHERE trip_id = ? AND person_id = ?
+          `).get(trip.id, m.person_id);
+
+          if (!existing) {
+            req.db.prepare(`
+              INSERT INTO trip_participants (trip_id, person_id, attendance)
+              VALUES (?, ?, 'pending')
+            `).run(trip.id, m.person_id);
+
+            notifyTripParticipantAdded(req.db, {
+              tripId: trip.id,
+              personId: m.person_id,
+              addedByUserId: req.user!.id,
+              tripName: updatedName,
+              tripDates: (updatedStart ? (updatedEnd ? `${updatedStart} to ${updatedEnd}` : updatedStart) : updatedDest) || undefined,
+            });
+          }
+        }
+      }
+    }
+
+    // If specific participant_person_ids provided
+    if (data.participant_person_ids && data.participant_person_ids.length > 0) {
+      for (const personId of data.participant_person_ids) {
+        const existing = req.db.prepare(`
+          SELECT id FROM trip_participants WHERE trip_id = ? AND person_id = ?
+        `).get(trip.id, personId);
+
+        if (!existing) {
+          req.db.prepare(`
+            INSERT INTO trip_participants (trip_id, person_id, attendance)
+            VALUES (?, ?, 'pending')
+          `).run(trip.id, personId);
+
+          notifyTripParticipantAdded(req.db, {
+            tripId: trip.id,
+            personId,
+            addedByUserId: req.user!.id,
+            tripName: updatedName,
+            tripDates: (updatedStart ? (updatedEnd ? `${updatedStart} to ${updatedEnd}` : updatedStart) : updatedDest) || undefined,
+          });
+        }
+      }
+    }
+
+    recordAuditLog(req.db, req.user!.id, 'UPDATE_TRIP', 'trips', trip.id, trip, { name: updatedName, status: updatedStatus, isPrivate: updatedPrivate });
+  });
 
   res.json({ message: 'Trip updated successfully' });
 });

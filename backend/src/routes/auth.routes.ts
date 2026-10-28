@@ -412,3 +412,214 @@ authRouter.get('/me', requireAuth, (req: Request, res: Response) => {
     family: req.family,
   });
 });
+
+// GET /api/auth/profile - Full profile including family members breakdown
+authRouter.get('/profile', requireAuth, (req: Request, res: Response) => {
+  const user = req.user!;
+  const person = req.person!;
+  const family = req.family;
+
+  let familyMembers: any[] = [];
+  if (family) {
+    familyMembers = req.db.prepare(`
+      SELECT p.id, p.display_name, p.user_id, p.is_active, u.email, fm.joined_at,
+             CASE WHEN f.admin_user_id = p.user_id THEN 1 ELSE 0 END as is_family_admin,
+             CASE WHEN p.id = ? THEN 1 ELSE 0 END as is_current_user
+      FROM family_memberships fm
+      JOIN persons p ON fm.person_id = p.id
+      LEFT JOIN users u ON p.user_id = u.id
+      JOIN families f ON fm.family_id = f.id
+      WHERE fm.family_id = ? AND fm.left_at IS NULL AND p.is_active = 1
+      ORDER BY p.id ASC
+    `).all(person?.id ?? -1, family.id);
+  }
+
+  res.json({
+    user: {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      is_active: user.is_active,
+      created_at: user.created_at,
+    },
+    person,
+    family,
+    familyMembers,
+  });
+});
+
+// POST /api/auth/profile/family - Create or update family name
+authRouter.post('/profile/family', requireAuth, (req: Request, res: Response) => {
+  const { name } = req.body;
+  if (!name || typeof name !== 'string' || name.trim().length < 2) {
+    res.status(400).json({ error: 'INVALID_NAME', message: 'Family name must be at least 2 characters long' });
+    return;
+  }
+
+  const trimmedName = name.trim();
+  const user = req.user!;
+  const person = req.person!;
+
+  try {
+    const updatedFamily = withTransaction(req.db, () => {
+      let family = req.family;
+      if (family) {
+        // Update existing family name
+        req.db.prepare(`UPDATE families SET name = ? WHERE id = ?`).run(trimmedName, family.id);
+        return { ...family, name: trimmedName };
+      } else {
+        // Create new family for this user
+        const famRes = req.db.prepare(`
+          INSERT INTO families (name, admin_user_id, is_active)
+          VALUES (?, ?, 1)
+        `).run(trimmedName, user.id);
+        const familyId = Number(famRes.lastInsertRowid);
+
+        if (person) {
+          req.db.prepare(`
+            INSERT OR IGNORE INTO family_memberships (family_id, person_id)
+            VALUES (?, ?)
+          `).run(familyId, person.id);
+        }
+
+        // Elevate user role to family_admin if currently standard member
+        if (user.role === 'member') {
+          req.db.prepare(`UPDATE users SET role = 'family_admin' WHERE id = ?`).run(user.id);
+        }
+
+        return { id: familyId, name: trimmedName, admin_user_id: user.id, is_active: 1 };
+      }
+    });
+
+    res.json({ message: 'Family saved successfully', family: updatedFamily });
+  } catch (err: any) {
+    res.status(500).json({ error: 'FAMILY_UPDATE_FAILED', message: err.message });
+  }
+});
+
+// POST /api/auth/profile/family/members - Add a family member (spouse, child, etc.)
+authRouter.post('/profile/family/members', requireAuth, (req: Request, res: Response) => {
+  const { display_name, email, password } = req.body;
+  if (!display_name || typeof display_name !== 'string' || display_name.trim().length < 2) {
+    res.status(400).json({ error: 'INVALID_NAME', message: 'Display name must be at least 2 characters' });
+    return;
+  }
+
+  const user = req.user!;
+  const person = req.person!;
+  let family = req.family;
+
+  try {
+    const createdMember = withTransaction(req.db, () => {
+      // If user doesn't have a family yet, auto-create one based on their name
+      if (!family) {
+        const defaultFamName = `${person?.display_name || user.email.split('@')[0]}'s Family`;
+        const famRes = req.db.prepare(`
+          INSERT INTO families (name, admin_user_id, is_active)
+          VALUES (?, ?, 1)
+        `).run(defaultFamName, user.id);
+        const famId = Number(famRes.lastInsertRowid);
+
+        if (person) {
+          req.db.prepare(`
+            INSERT OR IGNORE INTO family_memberships (family_id, person_id)
+            VALUES (?, ?)
+          `).run(famId, person.id);
+        }
+
+        family = { id: famId, name: defaultFamName, admin_user_id: user.id, is_active: 1 } as any;
+      }
+
+      let newUserId: number | null = null;
+      if (email && password) {
+        const existing = req.db.prepare('SELECT id FROM users WHERE email = ? COLLATE NOCASE').get(email);
+        if (existing) {
+          throw new Error(`Email ${email} is already in use`);
+        }
+        const pwdHash = hashPassword(password);
+        const uRes = req.db.prepare(`
+          INSERT INTO users (email, password_hash, role, is_active)
+          VALUES (?, ?, 'member', 1)
+        `).run(email, pwdHash);
+        newUserId = Number(uRes.lastInsertRowid);
+      }
+
+      const pRes = req.db.prepare(`
+        INSERT INTO persons (display_name, user_id, is_active)
+        VALUES (?, ?, 1)
+      `).run(display_name.trim(), newUserId);
+      const newPersonId = Number(pRes.lastInsertRowid);
+
+      req.db.prepare(`
+        INSERT INTO family_memberships (family_id, person_id)
+        VALUES (?, ?)
+      `).run(family!.id, newPersonId);
+
+      return {
+        id: newPersonId,
+        display_name: display_name.trim(),
+        user_id: newUserId,
+        email: email || null,
+        family_id: family!.id,
+      };
+    });
+
+    res.status(201).json({ message: 'Family member added successfully', member: createdMember });
+  } catch (err: any) {
+    res.status(400).json({ error: 'MEMBER_ADD_FAILED', message: err.message });
+  }
+});
+
+// DELETE /api/auth/profile/family/members/:personId - Remove member from family
+authRouter.delete('/profile/family/members/:personId', requireAuth, (req: Request, res: Response) => {
+  const targetPersonId = Number(req.params.personId);
+  const user = req.user!;
+  const person = req.person!;
+  const family = req.family;
+
+  if (!family) {
+    res.status(400).json({ error: 'NO_FAMILY', message: 'You do not belong to a family' });
+    return;
+  }
+
+  if (person && person.id === targetPersonId) {
+    res.status(400).json({ error: 'CANNOT_REMOVE_SELF', message: 'You cannot remove yourself from your family' });
+    return;
+  }
+
+  // Ensure target belongs to user's family
+  const membership = req.db.prepare(`
+    SELECT id FROM family_memberships
+    WHERE family_id = ? AND person_id = ? AND left_at IS NULL
+  `).get(family.id, targetPersonId);
+
+  if (!membership) {
+    res.status(404).json({ error: 'NOT_FOUND', message: 'Member not found in your family' });
+    return;
+  }
+
+  // Check if they are involved in trip expenses
+  const hasExpenses = req.db.prepare(`
+    SELECT 1 FROM expense_allocations WHERE account_type = 'person' AND account_id = ?
+    UNION
+    SELECT 1 FROM expenses WHERE paid_by_type = 'person' AND paid_by_id = ?
+    LIMIT 1
+  `).get(targetPersonId, targetPersonId);
+
+  if (hasExpenses) {
+    // Soft remove: set left_at
+    req.db.prepare(`
+      UPDATE family_memberships
+      SET left_at = datetime('now')
+      WHERE family_id = ? AND person_id = ?
+    `).run(family.id, targetPersonId);
+  } else {
+    // Delete membership
+    req.db.prepare(`
+      DELETE FROM family_memberships
+      WHERE family_id = ? AND person_id = ?
+    `).run(family.id, targetPersonId);
+  }
+
+  res.json({ message: 'Member removed from family' });
+});

@@ -8,6 +8,7 @@ import { ExpenseSplitWizard } from './ExpenseSplitWizard';
 import { RepaymentModal } from './RepaymentModal';
 import { TripMap } from './TripMap';
 import { ReportsView } from './ReportsView';
+import { TripEditModal } from './TripEditModal';
 import {
   Receipt,
   Users,
@@ -27,6 +28,8 @@ import {
   Check,
   X,
   CreditCard,
+  Edit2,
+  UserCheck,
 } from 'lucide-react';
 
 interface Props {
@@ -61,13 +64,14 @@ export const TripDetail: React.FC<Props> = ({
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Active sub-tab: 'expenses' | 'attendance' | 'ledger' | 'reports' | 'map'
-  const [activeTab, setActiveTab] = useState<'expenses' | 'attendance' | 'ledger' | 'reports' | 'map'>('expenses');
+  // Active sub-tab: 'expenses' | 'ledger' | 'members' | 'attendance' | 'reports' | 'map'
+  const [activeTab, setActiveTab] = useState<'expenses' | 'ledger' | 'members' | 'attendance' | 'reports' | 'map'>('expenses');
 
   // Modal controls
   const [showItemizedEditor, setShowItemizedEditor] = useState(false);
   const [showSplitWizard, setShowSplitWizard] = useState(false);
   const [showRepaymentModal, setShowRepaymentModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [repaymentPrefill, setRepaymentPrefill] = useState<any>(null);
 
   // Cover image modal state
@@ -253,7 +257,17 @@ export const TripDetail: React.FC<Props> = ({
           )}
         </div>
 
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          {isCreatorOrAdmin && (
+            <button
+              type="button"
+              onClick={() => setShowEditModal(true)}
+              className="btn btn-secondary btn-sm"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+            >
+              <Edit2 size={15} /> Edit Trip & Invite
+            </button>
+          )}
           {isCreatorOrAdmin && trip.status !== 'completed' && (
             <button type="button" onClick={handleMarkCompleted} className="btn btn-secondary btn-sm">
               <CheckCircle2 size={16} /> {t.markCompleted}
@@ -265,55 +279,55 @@ export const TripDetail: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* Logged-In User Complete Expense Overview Card from Starting */}
+      {/* Logged-In User Complete Expense Overview Card from Starting (Lovable warm ivory style) */}
       {currentPerson && (
-        <div style={{
-          background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
-          color: '#ffffff',
+        <div className="card-white" style={{
           borderRadius: '16px',
           padding: '1.25rem 1.5rem',
           marginBottom: '1.5rem',
-          boxShadow: '0 4px 20px rgba(15, 23, 42, 0.12)',
+          background: '#ffffff',
+          border: '1px solid #e2e8f0',
           display: 'flex',
           flexWrap: 'wrap',
           alignItems: 'center',
           justifyContent: 'space-between',
-          gap: '1rem',
+          gap: '1.25rem',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.03)',
         }}>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', color: '#f59e0b', fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', color: '#b45309', fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               <Wallet size={15} /> Your Trip Expense Summary
             </div>
-            <h3 style={{ margin: '0.2rem 0 0 0', fontSize: '1.2rem', fontWeight: 700, color: '#ffffff' }}>
+            <h3 style={{ margin: '0.2rem 0 0 0', fontSize: '1.25rem', fontWeight: 700, color: '#0f172a', fontFamily: 'var(--font-display)' }}>
               {currentPerson.display_name}
             </h3>
-            <p style={{ margin: '0.15rem 0 0 0', fontSize: '0.8rem', color: '#94a3b8' }}>
-              Your complete personal expenditure & balance since the start of this trip
+            <p style={{ margin: '0.15rem 0 0 0', fontSize: '0.82rem', color: '#64748b' }}>
+              Your personal expenditure & balance since the start of this trip
             </p>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
-            <div>
-              <div style={{ fontSize: '0.74rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Total You Paid</div>
-              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#ffffff' }}>{formatINR(userPaid)}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '0.65rem 1.1rem', borderRadius: '12px' }}>
+              <div style={{ fontSize: '0.72rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.03em' }}>Total You Paid</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', marginTop: '1px' }}>{formatINR(userPaid)}</div>
             </div>
 
-            <div>
-              <div style={{ fontSize: '0.74rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Your Allocated Share</div>
-              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#ffffff' }}>{formatINR(userShare)}</div>
+            <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', padding: '0.65rem 1.1rem', borderRadius: '12px' }}>
+              <div style={{ fontSize: '0.72rem', color: '#0369a1', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.03em' }}>Your Share</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0284c7', marginTop: '1px' }}>{formatINR(userShare)}</div>
             </div>
 
             <div style={{
-              background: userNet > 0 ? 'rgba(5, 150, 105, 0.25)' : userNet < 0 ? 'rgba(220, 38, 38, 0.25)' : 'rgba(148, 163, 184, 0.2)',
-              border: userNet > 0 ? '1px solid #059669' : userNet < 0 ? '1px solid #dc2626' : '1px solid #64748b',
-              padding: '0.55rem 0.95rem',
+              background: userNet > 0 ? '#ecfdf5' : userNet < 0 ? '#fff1f2' : '#f8fafc',
+              border: userNet > 0 ? '1px solid #a7f3d0' : userNet < 0 ? '1px solid #fecdd3' : '1px solid #e2e8f0',
+              padding: '0.65rem 1.1rem',
               borderRadius: '12px',
             }}>
-              <div style={{ fontSize: '0.72rem', color: userNet > 0 ? '#34d399' : userNet < 0 ? '#f87171' : '#cbd5e1', textTransform: 'uppercase', fontWeight: 700 }}>
+              <div style={{ fontSize: '0.72rem', color: userNet > 0 ? '#047857' : userNet < 0 ? '#be123c' : '#64748b', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.03em' }}>
                 {userNet > 0 ? 'You Get Back' : userNet < 0 ? 'You Owe' : 'Net Status'}
               </div>
-              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: userNet > 0 ? '#34d399' : userNet < 0 ? '#f87171' : '#ffffff' }}>
-                {userNet > 0 ? `+${formatINR(userNet)}` : userNet < 0 ? `-${formatINR(Math.abs(userNet))}` : 'All settled (₹0)'}
+              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: userNet > 0 ? '#047857' : userNet < 0 ? '#be123c' : '#0f172a', marginTop: '1px' }}>
+                {userNet > 0 ? `+${formatINR(userNet)}` : userNet < 0 ? `-${formatINR(Math.abs(userNet))}` : 'Settled (₹0)'}
               </div>
             </div>
           </div>
@@ -325,7 +339,8 @@ export const TripDetail: React.FC<Props> = ({
         {[
           { id: 'expenses', label: t.expenses, icon: Receipt, count: expenses.length },
           { id: 'ledger', label: t.settlements, icon: Scale, count: ledger?.suggestedSettlements?.length },
-          { id: 'attendance', label: t.attendance, icon: Users, count: trip.participants.length },
+          { id: 'members', label: 'Trip Members', icon: Users, count: trip.participants.length },
+          { id: 'attendance', label: t.attendance, icon: CheckCircle2 },
           { id: 'reports', label: t.reports, icon: BarChart3 },
           { id: 'map', label: 'Map', icon: MapPin },
         ].map(tab => {
@@ -834,6 +849,135 @@ export const TripDetail: React.FC<Props> = ({
         </div>
       )}
 
+      {/* TAB CONTENT: Trip Members Details */}
+      {activeTab === 'members' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          <div className="card-white" style={{ borderRadius: '16px', padding: '1.25rem 1.5rem', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', background: '#ffffff' }}>
+            <div>
+              <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#0f172a', margin: 0, fontFamily: 'var(--font-display)' }}>
+                Trip Members & Families ({trip.participants.length})
+              </h3>
+              <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.82rem', color: '#64748b' }}>
+                All participants in this trip with their attendance status, family affiliation, and expense standing.
+              </p>
+            </div>
+
+            {isCreatorOrAdmin && (
+              <button
+                type="button"
+                onClick={() => setShowEditModal(true)}
+                className="btn btn-primary btn-sm"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+              >
+                <Plus size={15} /> Invite / Add Members
+              </button>
+            )}
+          </div>
+
+          {/* Members Cards Grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
+            {trip.participants.map((p: any) => {
+              const initials = p.display_name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase();
+              const isMe = p.id === currentPerson?.id;
+              const isCreator = p.user_id === trip.created_by;
+              const memberBalance = ledger?.balances?.find((b: any) => b.key === `p:${p.id}`);
+
+              return (
+                <div
+                  key={p.id}
+                  className="card-white"
+                  style={{
+                    borderRadius: '16px',
+                    padding: '1.25rem',
+                    border: isMe ? '2px solid #0f172a' : '1px solid #e2e8f0',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    boxShadow: '0 2px 6px rgba(0,0,0,0.03)',
+                    background: '#ffffff',
+                  }}
+                >
+                  <div>
+                    {/* Header: Avatar, Name, Badges */}
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '0.85rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        <div style={{
+                          width: '42px',
+                          height: '42px',
+                          borderRadius: '50%',
+                          background: isMe ? '#0f172a' : '#f1f5f9',
+                          color: isMe ? '#ffffff' : '#334155',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontWeight: 700,
+                          fontSize: '0.9rem',
+                        }}>
+                          {initials}
+                        </div>
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: '0.98rem', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                            {p.display_name}
+                            {isMe && <span className="badge badge-green" style={{ fontSize: '0.65rem' }}>You</span>}
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                            {p.family_name || 'Independent Member'}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem' }}>
+                        {isCreator && (
+                          <span className="badge badge-amber" style={{ fontSize: '0.68rem' }}>Trip Creator</span>
+                        )}
+                        <span className={`badge ${
+                          p.attendance === 'coming' ? 'badge-green' :
+                          p.attendance === 'interested' ? 'badge-amber' :
+                          p.attendance === 'declined' ? 'badge-red' : 'badge-gray'
+                        }`} style={{ fontSize: '0.68rem', textTransform: 'capitalize' }}>
+                          {p.attendance || 'pending'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Member Trip Financial Snapshot */}
+                    {memberBalance && (
+                      <div style={{
+                        background: '#f8fafc',
+                        borderRadius: '10px',
+                        padding: '0.75rem',
+                        fontSize: '0.78rem',
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 1fr',
+                        gap: '0.5rem',
+                        border: '1px solid #f1f5f9',
+                        marginTop: '0.5rem',
+                      }}>
+                        <div>
+                          <div style={{ color: '#64748b' }}>Paid</div>
+                          <div style={{ fontWeight: 700, color: '#0f172a', marginTop: '1px' }}>{formatINR(memberBalance.paid)}</div>
+                        </div>
+                        <div>
+                          <div style={{ color: '#64748b' }}>Share</div>
+                          <div style={{ fontWeight: 700, color: '#0f172a', marginTop: '1px' }}>{formatINR(memberBalance.share)}</div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Attendance Note if any */}
+                  {p.attendance_notes && (
+                    <div style={{ fontSize: '0.75rem', color: '#64748b', fontStyle: 'italic', marginTop: '0.65rem', borderTop: '1px solid #f1f5f9', paddingTop: '0.5rem' }}>
+                      "{p.attendance_notes}"
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* TAB CONTENT: Attendance */}
       {activeTab === 'attendance' && (
         <AttendanceCard
@@ -1060,6 +1204,18 @@ export const TripDetail: React.FC<Props> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Trip Edit Modal */}
+      {showEditModal && (
+        <TripEditModal
+          trip={trip}
+          onClose={() => setShowEditModal(false)}
+          onTripUpdated={() => {
+            setShowEditModal(false);
+            loadAllTripData();
+          }}
+        />
       )}
     </div>
   );

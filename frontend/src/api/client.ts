@@ -4,7 +4,8 @@ export interface ApiResponse<T = any> {
   message?: string;
 }
 
-const BASE_URL = '/api';
+const RAW_BASE_URL = ((import.meta as any).env?.VITE_API_BASE_URL as string | undefined) || '/api';
+const BASE_URL = RAW_BASE_URL.replace(/\/+$/, '');
 
 export async function request<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const token = localStorage.getItem('tripmates_token');
@@ -17,7 +18,8 @@ export async function request<T = any>(endpoint: string, options: RequestInit = 
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${BASE_URL}${endpoint}`, {
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  const response = await fetch(`${BASE_URL}${cleanEndpoint}`, {
     ...options,
     headers,
     credentials: 'include',
