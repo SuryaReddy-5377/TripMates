@@ -15,6 +15,7 @@ const createTripSchema = z.object({
   end_date: z.string().optional(),
   description: z.string().optional(),
   notes: z.string().optional(),
+  cover_image: z.string().trim().max(1000).optional().nullable(),
   budget: z.union([z.string(), z.number()]).optional(),
   budget_paise: z.number().int().nonnegative().optional(),
   is_private: z.union([z.boolean(), z.number()]).optional().default(false),
@@ -29,6 +30,7 @@ const updateTripSchema = z.object({
   end_date: z.string().optional().nullable(),
   description: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
+  cover_image: z.string().trim().max(1000).optional().nullable(),
   budget: z.union([z.string(), z.number()]).optional().nullable(),
   budget_paise: z.number().int().nonnegative().optional().nullable(),
   status: z.enum(['planning', 'upcoming', 'ongoing', 'completed']).optional(),
@@ -44,7 +46,7 @@ tripsRouter.get('/', requireAuth, (req: Request, res: Response) => {
 
   let query = `
     SELECT DISTINCT t.id, t.name, t.destination, t.start_date, t.end_date,
-           t.description, t.notes, t.budget_paise, t.status, t.is_private,
+           t.description, t.notes, t.cover_image, t.budget_paise, t.status, t.is_private,
            t.created_by, t.completed_at, t.created_at,
            u.email as creator_email,
            (SELECT count(*) FROM trip_participants tp WHERE tp.trip_id = t.id) as participant_count,
@@ -106,8 +108,8 @@ tripsRouter.post('/', requireAuth, (req: Request, res: Response) => {
   try {
     const createdTrip = withTransaction(req.db, () => {
       const tripRes = req.db.prepare(`
-        INSERT INTO trips (name, destination, start_date, end_date, description, notes, budget_paise, is_private, created_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO trips (name, destination, start_date, end_date, description, notes, cover_image, budget_paise, is_private, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         data.name,
         data.destination || null,
@@ -115,6 +117,7 @@ tripsRouter.post('/', requireAuth, (req: Request, res: Response) => {
         data.end_date || null,
         data.description || null,
         data.notes || null,
+        data.cover_image || null,
         budgetPaise,
         isPrivateNum,
         req.user!.id
@@ -238,6 +241,7 @@ tripsRouter.patch('/:tripId', requireAuth, requireTripAccess('tripId'), (req: Re
   const updatedEnd = data.end_date !== undefined ? data.end_date : trip.end_date;
   const updatedDesc = data.description !== undefined ? data.description : trip.description;
   const updatedNotes = data.notes !== undefined ? data.notes : trip.notes;
+  const updatedCoverImage = (data.cover_image !== undefined ? data.cover_image : trip.cover_image) ?? null;
   const updatedStatus = data.status ?? trip.status;
   const updatedPrivate = data.is_private !== undefined ? (Boolean(data.is_private) ? 1 : 0) : trip.is_private;
   const completedAt = updatedStatus === 'completed' && !trip.completed_at ? new Date().toISOString() : trip.completed_at;
@@ -245,7 +249,7 @@ tripsRouter.patch('/:tripId', requireAuth, requireTripAccess('tripId'), (req: Re
   req.db.prepare(`
     UPDATE trips
     SET name = ?, destination = ?, start_date = ?, end_date = ?, description = ?, notes = ?,
-        budget_paise = ?, status = ?, is_private = ?, completed_at = ?
+        cover_image = ?, budget_paise = ?, status = ?, is_private = ?, completed_at = ?
     WHERE id = ?
   `).run(
     updatedName,
@@ -254,6 +258,7 @@ tripsRouter.patch('/:tripId', requireAuth, requireTripAccess('tripId'), (req: Re
     updatedEnd,
     updatedDesc,
     updatedNotes,
+    updatedCoverImage,
     budgetPaise,
     updatedStatus,
     updatedPrivate,

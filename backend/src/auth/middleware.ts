@@ -125,7 +125,7 @@ export function requireTripAccess(paramName = 'tripId') {
     }
 
     const trip = req.db.prepare(`
-      SELECT id, name, destination, start_date, end_date, description, notes, budget_paise, status, is_private, created_by, completed_at, created_at
+      SELECT id, name, destination, start_date, end_date, description, notes, cover_image, budget_paise, status, is_private, created_by, completed_at, created_at
       FROM trips
       WHERE id = ?
     `).get(tripId) as Trip | undefined;

@@ -247,6 +247,7 @@ expensesRouter.post('/preview', requireAuth, requireTripAccess('tripId'), (req: 
 // GET /api/trips/:tripId/expenses - List trip expenses
 expensesRouter.get('/', requireAuth, requireTripAccess('tripId'), (req: Request, res: Response) => {
   const tripId = req.trip!.id;
+  const userPersonId = req.person?.id || null;
 
   const expenses = req.db.prepare(`
     SELECT e.id, e.trip_id, e.title, e.expense_date, e.category, e.currency,
@@ -258,11 +259,20 @@ expensesRouter.get('/', requireAuth, requireTripAccess('tripId'), (req: Request,
              WHEN e.paid_by_type = 'family' THEN (SELECT name FROM families WHERE id = e.paid_by_id)
            END as payer_name,
            (SELECT count(*) FROM expense_items ei WHERE ei.expense_id = e.id) as item_count,
-           (SELECT count(*) FROM expense_allocations ea WHERE ea.expense_id = e.id) as participant_count
+           (SELECT count(*) FROM expense_allocations ea WHERE ea.expense_id = e.id) as participant_count,
+           coalesce(
+             (SELECT ea.amount_paise FROM expense_allocations ea WHERE ea.expense_id = e.id AND ea.account_type = 'person' AND ea.account_id = ?),
+             (SELECT fsb.amount_paise FROM family_share_breakdown fsb WHERE fsb.expense_id = e.id AND fsb.person_id = ?),
+             0
+           ) as my_share_paise,
+           CASE
+             WHEN e.paid_by_type = 'person' AND e.paid_by_id = ? THEN 1
+             ELSE 0
+           END as is_my_payment
     FROM expenses e
     WHERE e.trip_id = ?
     ORDER BY e.expense_date DESC, e.id DESC
-  `).all(tripId);
+  `).all(userPersonId, userPersonId, userPersonId, tripId);
 
   res.json(expenses);
 });

@@ -21,6 +21,12 @@ import {
   ArrowRight,
   Trash2,
   Sparkles,
+  Camera,
+  ImageIcon,
+  Wallet,
+  Check,
+  X,
+  CreditCard,
 } from 'lucide-react';
 
 interface Props {
@@ -30,6 +36,14 @@ interface Props {
   currentFamily: any;
   onBack: () => void;
 }
+
+const COVER_PRESETS = [
+  { label: 'Mountain Resort', url: '/images/mountain_resort.jpg' },
+  { label: 'Kerala Backwaters', url: '/images/trip-kerala.jpg' },
+  { label: 'Beach Vacation', url: '/images/photo-family-beach.jpg' },
+  { label: 'Sea Shore', url: '/images/beach_vacation.jpg' },
+  { label: 'Family Travel', url: '/images/hero_family_trip.jpg' },
+];
 
 export const TripDetail: React.FC<Props> = ({
   tripId,
@@ -55,6 +69,26 @@ export const TripDetail: React.FC<Props> = ({
   const [showSplitWizard, setShowSplitWizard] = useState(false);
   const [showRepaymentModal, setShowRepaymentModal] = useState(false);
   const [repaymentPrefill, setRepaymentPrefill] = useState<any>(null);
+
+  // Cover image modal state
+  const [showCoverModal, setShowCoverModal] = useState(false);
+  const [coverInput, setCoverInput] = useState('');
+  const [isUpdatingCover, setIsUpdatingCover] = useState(false);
+
+  const handleUpdateCover = async (url: string) => {
+    if (!url.trim()) return;
+    try {
+      setIsUpdatingCover(true);
+      await api.patch(`/trips/${tripId}`, { cover_image: url.trim() });
+      setShowCoverModal(false);
+      setCoverInput('');
+      loadAllTripData();
+    } catch (err: any) {
+      alert(err.message || 'Failed to update cover photo');
+    } finally {
+      setIsUpdatingCover(false);
+    }
+  };
 
   const loadAllTripData = async () => {
     try {
@@ -140,10 +174,16 @@ export const TripDetail: React.FC<Props> = ({
     allAccounts.push({ key: `f:${f.id}`, type: 'family', id: f.id, name: `${f.name} (Family)` });
   });
 
+  // Personal financial summary for logged-in user from the start of this trip
+  const userBalance = ledger?.balances?.find((b: any) => b.key === `p:${currentPerson?.id}`);
+  const userPaid = userBalance ? userBalance.paid : 0;
+  const userShare = userBalance ? userBalance.share : 0;
+  const userNet = userBalance ? userBalance.net : 0;
+
   return (
     <div className="container" style={{ paddingBottom: '4rem' }}>
-      {/* Top Banner */}
-      <div style={{ marginBottom: '1.5rem', marginTop: '1rem' }}>
+      {/* Top Banner with Custom Cover Image & Edit Option */}
+      <div style={{ marginBottom: '1.5rem', marginTop: '1rem', position: 'relative' }}>
         <button
           type="button"
           onClick={onBack}
@@ -152,16 +192,51 @@ export const TripDetail: React.FC<Props> = ({
           ← {t.back} to {t.dashboard}
         </button>
 
-        <PineForestBanner
-          title={trip.name}
-          subtitle={`${trip.destination || 'Unspecified location'} · ${trip.start_date || ''} ${trip.end_date ? 'to ' + trip.end_date : ''}`}
-          height={210}
-          bgImage="/images/trip-kerala.jpg"
-        />
+        <div style={{ position: 'relative', borderRadius: '18px', overflow: 'hidden' }}>
+          <PineForestBanner
+            title={trip.name}
+            subtitle={`${trip.destination || 'Unspecified location'} · ${trip.start_date || ''} ${trip.end_date ? 'to ' + trip.end_date : ''}`}
+            height={220}
+            bgImage={trip.cover_image || '/images/mountain_resort.jpg'}
+          />
+
+          {/* Change Cover Photo Button (Trip Creator or Super Admin Only) */}
+          {isCreatorOrAdmin && (
+            <button
+              type="button"
+              onClick={() => {
+                setCoverInput(trip.cover_image || '');
+                setShowCoverModal(true);
+              }}
+              style={{
+                position: 'absolute',
+                top: '16px',
+                right: '16px',
+                background: 'rgba(15, 23, 42, 0.75)',
+                color: '#ffffff',
+                border: '1px solid rgba(255, 255, 255, 0.35)',
+                backdropFilter: 'blur(8px)',
+                borderRadius: '10px',
+                padding: '0.45rem 0.85rem',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.45rem',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <Camera size={15} />
+              <span>Change Cover Photo</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Meta Bar */}
-      <div className="card-white p-4" style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem', borderRadius: '16px', background: '#ffffff', padding: '1rem 1.25rem' }}>
+      <div className="card-white p-4" style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', marginBottom: '1.25rem', borderRadius: '16px', background: '#ffffff', padding: '1rem 1.25rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
           <span className={`badge ${trip.status === 'completed' ? 'badge-green' : 'badge-amber'}`}>
             {trip.status.toUpperCase()}
@@ -189,6 +264,61 @@ export const TripDetail: React.FC<Props> = ({
           </button>
         </div>
       </div>
+
+      {/* Logged-In User Complete Expense Overview Card from Starting */}
+      {currentPerson && (
+        <div style={{
+          background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+          color: '#ffffff',
+          borderRadius: '16px',
+          padding: '1.25rem 1.5rem',
+          marginBottom: '1.5rem',
+          boxShadow: '0 4px 20px rgba(15, 23, 42, 0.12)',
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '1rem',
+        }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', color: '#f59e0b', fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              <Wallet size={15} /> Your Trip Expense Summary
+            </div>
+            <h3 style={{ margin: '0.2rem 0 0 0', fontSize: '1.2rem', fontWeight: 700, color: '#ffffff' }}>
+              {currentPerson.display_name}
+            </h3>
+            <p style={{ margin: '0.15rem 0 0 0', fontSize: '0.8rem', color: '#94a3b8' }}>
+              Your complete personal expenditure & balance since the start of this trip
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ fontSize: '0.74rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Total You Paid</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#ffffff' }}>{formatINR(userPaid)}</div>
+            </div>
+
+            <div>
+              <div style={{ fontSize: '0.74rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>Your Allocated Share</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#ffffff' }}>{formatINR(userShare)}</div>
+            </div>
+
+            <div style={{
+              background: userNet > 0 ? 'rgba(5, 150, 105, 0.25)' : userNet < 0 ? 'rgba(220, 38, 38, 0.25)' : 'rgba(148, 163, 184, 0.2)',
+              border: userNet > 0 ? '1px solid #059669' : userNet < 0 ? '1px solid #dc2626' : '1px solid #64748b',
+              padding: '0.55rem 0.95rem',
+              borderRadius: '12px',
+            }}>
+              <div style={{ fontSize: '0.72rem', color: userNet > 0 ? '#34d399' : userNet < 0 ? '#f87171' : '#cbd5e1', textTransform: 'uppercase', fontWeight: 700 }}>
+                {userNet > 0 ? 'You Get Back' : userNet < 0 ? 'You Owe' : 'Net Status'}
+              </div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: userNet > 0 ? '#34d399' : userNet < 0 ? '#f87171' : '#ffffff' }}>
+                {userNet > 0 ? `+${formatINR(userNet)}` : userNet < 0 ? `-${formatINR(Math.abs(userNet))}` : 'All settled (₹0)'}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Tabs Header */}
       <div style={{ display: 'flex', gap: '0.5rem', borderBottom: '1px solid #e2e8f0', marginBottom: '1.5rem', overflowX: 'auto' }}>
@@ -261,7 +391,7 @@ export const TripDetail: React.FC<Props> = ({
               {expenses.map((exp: any) => (
                 <div
                   key={exp.id}
-                  className="card-white p-4"
+                  className="card-white"
                   style={{
                     borderRadius: '14px',
                     display: 'flex',
@@ -271,18 +401,40 @@ export const TripDetail: React.FC<Props> = ({
                     gap: '1rem',
                     opacity: exp.voided_at ? 0.45 : 1,
                     padding: '1rem 1.25rem',
+                    borderLeft: exp.voided_at ? '4px solid #cbd5e1' : exp.is_my_payment === 1 ? '4px solid #059669' : exp.my_share_paise > 0 ? '4px solid #3b82f6' : '4px solid #e2e8f0',
                   }}
                 >
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <h4 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#0f172a' }}>{exp.title}</h4>
+                  <div style={{ flex: '1 1 300px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <h4 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>{exp.title}</h4>
                       <span className="badge badge-green" style={{ fontSize: '0.7rem' }}>{exp.category}</span>
                       <span className="badge badge-amber" style={{ fontSize: '0.7rem' }}>{exp.split_method}</span>
                       {exp.voided_at && <span className="badge badge-red" style={{ fontSize: '0.7rem' }}>VOIDED</span>}
                     </div>
-                    <div style={{ fontSize: '0.82rem', color: '#64748b', marginTop: '0.25rem' }}>
+
+                    <div style={{ fontSize: '0.82rem', color: '#64748b', marginTop: '0.35rem' }}>
                       {exp.expense_date} · Paid by <strong style={{ color: '#0f172a' }}>{exp.payer_name}</strong> · {exp.participant_count} participants
                     </div>
+
+                    {/* Member Share Highlight for Logged-In User */}
+                    {!exp.voided_at && currentPerson && (
+                      <div style={{ marginTop: '0.45rem', display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
+                        {exp.is_my_payment === 1 && (
+                          <span style={{ fontSize: '0.72rem', fontWeight: 600, background: '#dcfce7', color: '#15803d', padding: '0.15rem 0.55rem', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                            <Check size={12} /> You paid this full bill
+                          </span>
+                        )}
+                        {exp.my_share_paise > 0 ? (
+                          <span style={{ fontSize: '0.72rem', fontWeight: 600, background: '#e0f2fe', color: '#0369a1', padding: '0.15rem 0.55rem', borderRadius: '6px' }}>
+                            Your share: {formatINR(exp.my_share_paise)}
+                          </span>
+                        ) : exp.is_my_payment !== 1 && (
+                          <span style={{ fontSize: '0.72rem', color: '#94a3b8', background: '#f1f5f9', padding: '0.15rem 0.55rem', borderRadius: '6px' }}>
+                            Not in your split
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
@@ -310,23 +462,109 @@ export const TripDetail: React.FC<Props> = ({
         </div>
       )}
 
-      {/* TAB CONTENT: Ledger & Settlements */}
+      {/* TAB CONTENT: Balances & Settlements (Lovable Style) */}
       {activeTab === 'ledger' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          {/* Top Status & Settle Up action */}
-          <div className="card-white p-4" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderRadius: '16px', background: '#ffffff', padding: '1.25rem 1.5rem' }}>
-            <div>
-              <div style={{ fontSize: '0.82rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>Settlement Status</div>
-              <div style={{ fontSize: '1.35rem', fontWeight: 800, color: ledger?.status === 'settled' ? '#059669' : '#d97706', display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.2rem' }}>
-                {ledger?.status === 'settled' ? (
-                  <>
-                    <CheckCircle2 size={22} /> {t.allSettled}
-                  </>
-                ) : (
-                  <>
-                    <Scale size={22} /> {t.unsettled}
-                  </>
-                )}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
+          {/* Top 3 Summary Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' }}>
+            {/* Total Trip Spend */}
+            <div className="card-white" style={{ borderRadius: '16px', padding: '1.35rem 1.5rem', border: '1px solid #e2e8f0' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Total Trip Spend
+                </span>
+                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0f172a' }}>
+                  <CreditCard size={18} />
+                </div>
+              </div>
+              <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#0f172a', fontFamily: 'var(--font-display)' }}>
+                {formatINR(ledger?.totalGroupSpend || 0)}
+              </div>
+              <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '0.35rem' }}>
+                Across {expenses.filter(e => !e.voided_at).length} active expenses
+              </div>
+            </div>
+
+            {/* Your Share */}
+            <div className="card-white" style={{ borderRadius: '16px', padding: '1.35rem 1.5rem', border: '1px solid #e2e8f0' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Your Share
+                </span>
+                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#e0f2fe', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0284c7' }}>
+                  <Users size={18} />
+                </div>
+              </div>
+              <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#0284c7', fontFamily: 'var(--font-display)' }}>
+                {formatINR(userShare)}
+              </div>
+              <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '0.35rem' }}>
+                You paid {formatINR(userPaid)} directly
+              </div>
+            </div>
+
+            {/* Net Position */}
+            <div className="card-white" style={{
+              borderRadius: '16px',
+              padding: '1.35rem 1.5rem',
+              border: userNet > 0 ? '1px solid #86efac' : userNet < 0 ? '1px solid #fca5a5' : '1px solid #e2e8f0',
+              background: userNet > 0 ? '#f0fdf4' : userNet < 0 ? '#fef2f2' : '#ffffff',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: userNet > 0 ? '#15803d' : userNet < 0 ? '#b91c1c' : '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  {userNet > 0 ? 'You Get Back' : userNet < 0 ? 'You Owe' : 'Your Balance'}
+                </span>
+                <div style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '8px',
+                  background: userNet > 0 ? '#dcfce7' : userNet < 0 ? '#fee2e2' : '#f1f5f9',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: userNet > 0 ? '#15803d' : userNet < 0 ? '#b91c1c' : '#64748b',
+                }}>
+                  <Scale size={18} />
+                </div>
+              </div>
+              <div style={{
+                fontSize: '1.75rem',
+                fontWeight: 800,
+                color: userNet > 0 ? '#15803d' : userNet < 0 ? '#b91c1c' : '#64748b',
+                fontFamily: 'var(--font-display)',
+              }}>
+                {userNet > 0 ? `+${formatINR(userNet)}` : userNet < 0 ? `-${formatINR(Math.abs(userNet))}` : '₹0 Settled'}
+              </div>
+              <div style={{ fontSize: '0.78rem', color: userNet > 0 ? '#15803d' : userNet < 0 ? '#b91c1c' : '#64748b', marginTop: '0.35rem' }}>
+                {userNet > 0 ? 'Others owe you money' : userNet < 0 ? 'Please settle with members' : 'All accounts even'}
+              </div>
+            </div>
+          </div>
+
+          {/* Settle Up Bar */}
+          <div className="card-white" style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', borderRadius: '16px', padding: '1rem 1.5rem', border: '1px solid #e2e8f0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <div style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '50%',
+                background: ledger?.status === 'settled' ? '#dcfce7' : '#fef3c7',
+                color: ledger?.status === 'settled' ? '#15803d' : '#d97706',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
+                {ledger?.status === 'settled' ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}
+              </div>
+              <div>
+                <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0f172a' }}>
+                  {ledger?.status === 'settled' ? 'Trip is fully settled' : 'Unsettled balances pending'}
+                </div>
+                <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                  {ledger?.status === 'settled'
+                    ? 'All participant debits and credits have been reconciled.'
+                    : 'Check suggested transfers below to settle with minimum transactions.'}
+                </div>
               </div>
             </div>
 
@@ -336,127 +574,256 @@ export const TripDetail: React.FC<Props> = ({
                 setRepaymentPrefill(null);
                 setShowRepaymentModal(true);
               }}
-              className="btn btn-primary btn-sm"
+              className="btn btn-primary"
+              style={{ fontSize: '0.85rem' }}
             >
               <Scale size={16} /> {t.recordRepayment}
             </button>
           </div>
 
-          {/* Suggested Transfers */}
+          {/* Suggested Transfers (Minimal Path) */}
           {ledger?.suggestedSettlements && ledger.suggestedSettlements.length > 0 && (
-            <div className="card-white p-5" style={{ borderRadius: '16px', background: '#ffffff', padding: '1.5rem' }}>
-              <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#0f172a', marginBottom: '0.5rem', fontFamily: 'var(--font-display)' }}>
-                {t.suggestedSettlements} (Minimal-path transfers)
-              </h3>
-              <p style={{ color: '#64748b', fontSize: '0.85rem', marginBottom: '1.25rem' }}>
-                Click "Pay" to prefill and record a repayment with automated debt validation.
+            <div className="card-white" style={{ borderRadius: '16px', padding: '1.5rem', border: '1px solid #e2e8f0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
+                <Sparkles size={18} style={{ color: '#059669' }} />
+                <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#0f172a', margin: 0, fontFamily: 'var(--font-display)' }}>
+                  Suggested Settlement Transfers
+                </h3>
+              </div>
+              <p style={{ color: '#64748b', fontSize: '0.82rem', marginBottom: '1.25rem' }}>
+                Calculated with a minimal-path transaction solver to settle all balances in the fewest steps.
               </p>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-                {ledger.suggestedSettlements.map((s: any, idx: number) => (
-                  <div
-                    key={idx}
-                    style={{
-                      background: '#f8fafc',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: '12px',
-                      padding: '0.85rem 1.15rem',
-                      display: 'flex',
-                      flexWrap: 'wrap',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      gap: '0.75rem',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                      <strong style={{ color: '#dc2626' }}>{s.from_name}</strong>
-                      <ArrowRight size={16} style={{ color: '#64748b' }} />
-                      <strong style={{ color: '#059669' }}>{s.to_name}</strong>
-                    </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                {ledger.suggestedSettlements.map((s: any, idx: number) => {
+                  const isCurrentDebtor = s.from_id === currentPerson?.id && s.from_type === 'person';
+                  const isCurrentCreditor = s.to_id === currentPerson?.id && s.to_type === 'person';
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                      <span style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a' }}>
-                        {formatINR(s.amount)}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => openRepaymentForSuggestion(s)}
-                        className="btn btn-primary btn-sm"
-                      >
-                        Settle Now
-                      </button>
+                  return (
+                    <div
+                      key={idx}
+                      style={{
+                        background: isCurrentDebtor ? '#fef2f2' : isCurrentCreditor ? '#f0fdf4' : '#f8fafc',
+                        border: isCurrentDebtor ? '1px solid #fecaca' : isCurrentCreditor ? '1px solid #bbf7d0' : '1px solid #e2e8f0',
+                        borderRadius: '12px',
+                        padding: '1rem 1.25rem',
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: '0.85rem',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+                        <div style={{
+                          width: '34px',
+                          height: '34px',
+                          borderRadius: '50%',
+                          background: '#fee2e2',
+                          color: '#dc2626',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontWeight: 700,
+                          fontSize: '0.8rem',
+                        }}>
+                          {s.from_name.slice(0, 2).toUpperCase()}
+                        </div>
+
+                        <div>
+                          <span style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.95rem' }}>{s.from_name}</span>
+                          {isCurrentDebtor && <span className="badge badge-red" style={{ marginLeft: '0.4rem', fontSize: '0.68rem' }}>You</span>}
+                          <span style={{ color: '#64748b', margin: '0 0.5rem', fontSize: '0.85rem' }}>owes</span>
+                          <span style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.95rem' }}>{s.to_name}</span>
+                          {isCurrentCreditor && <span className="badge badge-green" style={{ marginLeft: '0.4rem', fontSize: '0.68rem' }}>You</span>}
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                        <span style={{ fontSize: '1.25rem', fontWeight: 800, color: '#059669' }}>
+                          {formatINR(s.amount)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => openRepaymentForSuggestion(s)}
+                          className="btn btn-primary btn-sm"
+                          style={{ padding: '0.4rem 0.85rem' }}
+                        >
+                          Settle Now
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
 
-          {/* Account Balances Table */}
-          <div className="card-white p-5" style={{ borderRadius: '16px', background: '#ffffff', padding: '1.5rem' }}>
-            <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#0f172a', marginBottom: '1rem', fontFamily: 'var(--font-display)' }}>
-              Outstanding Account Balances
+          {/* Member Balances Grid (Lovable style cards) */}
+          <div className="card-white" style={{ borderRadius: '16px', padding: '1.5rem', border: '1px solid #e2e8f0' }}>
+            <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#0f172a', marginBottom: '0.35rem', fontFamily: 'var(--font-display)' }}>
+              Member Balances
             </h3>
+            <p style={{ color: '#64748b', fontSize: '0.82rem', marginBottom: '1.25rem' }}>
+              Full financial standing for every participant from the start of the trip.
+            </p>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '0.85rem' }}>
-              {ledger?.balances?.map((b: any) => (
-                <div
-                  key={b.key}
-                  style={{
-                    background: '#f8fafc',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '12px',
-                    padding: '1rem',
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
-                    <span style={{ fontWeight: 700, fontSize: '0.95rem', color: '#0f172a' }}>{b.name}</span>
-                    <span className={`badge ${b.net > 0 ? 'badge-green' : b.net < 0 ? 'badge-red' : 'badge-amber'}`}>
-                      {b.net > 0 ? t.receives : b.net < 0 ? t.owes : 'Settled'}
-                    </span>
-                  </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
+              {ledger?.balances?.map((b: any) => {
+                const initials = b.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase();
+                const isMe = b.key === `p:${currentPerson?.id}`;
 
-                  <div style={{ fontSize: '1.35rem', fontWeight: 800, color: b.net > 0 ? '#059669' : b.net < 0 ? '#dc2626' : '#64748b', marginBottom: '0.5rem' }}>
-                    {formatINR(Math.abs(b.net))}
-                  </div>
+                return (
+                  <div
+                    key={b.key}
+                    style={{
+                      background: '#ffffff',
+                      border: isMe ? '2px solid #0f172a' : '1px solid #e2e8f0',
+                      borderRadius: '14px',
+                      padding: '1.15rem',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                    }}
+                  >
+                    <div>
+                      {/* Card Header: Avatar, Name, Net Badge */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.85rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                          <div style={{
+                            width: '38px',
+                            height: '38px',
+                            borderRadius: '50%',
+                            background: isMe ? '#0f172a' : '#f1f5f9',
+                            color: isMe ? '#ffffff' : '#334155',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontWeight: 700,
+                            fontSize: '0.85rem',
+                          }}>
+                            {initials}
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                              {b.name}
+                              {isMe && <span className="badge badge-green" style={{ fontSize: '0.65rem' }}>You</span>}
+                            </div>
+                            <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                              {b.type === 'family' ? 'Family Unit' : 'Individual'}
+                            </div>
+                          </div>
+                        </div>
 
-                  <div style={{ fontSize: '0.75rem', color: '#64748b', borderTop: '1px solid #e2e8f0', paddingTop: '0.5rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.25rem' }}>
-                    <div>Paid: <strong style={{ color: '#0f172a' }}>{formatINR(b.paid)}</strong></div>
-                    <div>Share: <strong style={{ color: '#0f172a' }}>{formatINR(b.share)}</strong></div>
-                    <div>Repaid: <strong style={{ color: '#0f172a' }}>{formatINR(b.sent)}</strong></div>
-                    <div>Received: <strong style={{ color: '#0f172a' }}>{formatINR(b.received)}</strong></div>
+                        {/* Status Badge */}
+                        <span style={{
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          padding: '0.2rem 0.55rem',
+                          borderRadius: '8px',
+                          background: b.net > 0 ? '#dcfce7' : b.net < 0 ? '#fee2e2' : '#f1f5f9',
+                          color: b.net > 0 ? '#15803d' : b.net < 0 ? '#dc2626' : '#64748b',
+                        }}>
+                          {b.net > 0 ? `+${formatINR(b.net)} Gets back` : b.net < 0 ? `-${formatINR(Math.abs(b.net))} Owes` : 'Settled'}
+                        </span>
+                      </div>
+
+                      {/* Stat Rows */}
+                      <div style={{
+                        background: '#f8fafc',
+                        borderRadius: '10px',
+                        padding: '0.75rem',
+                        fontSize: '0.78rem',
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 1fr',
+                        gap: '0.5rem',
+                        border: '1px solid #f1f5f9',
+                      }}>
+                        <div>
+                          <div style={{ color: '#64748b' }}>Total Paid</div>
+                          <div style={{ fontWeight: 700, color: '#0f172a', marginTop: '1px' }}>{formatINR(b.paid)}</div>
+                        </div>
+                        <div>
+                          <div style={{ color: '#64748b' }}>Total Share</div>
+                          <div style={{ fontWeight: 700, color: '#0f172a', marginTop: '1px' }}>{formatINR(b.share)}</div>
+                        </div>
+                        <div>
+                          <div style={{ color: '#64748b' }}>Repaid</div>
+                          <div style={{ fontWeight: 600, color: '#0f172a', marginTop: '1px' }}>{formatINR(b.sent)}</div>
+                        </div>
+                        <div>
+                          <div style={{ color: '#64748b' }}>Received</div>
+                          <div style={{ fontWeight: 600, color: '#0f172a', marginTop: '1px' }}>{formatINR(b.received)}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Settle Up Action Button if debt exists */}
+                    {b.net !== 0 && (
+                      <div style={{ marginTop: '0.85rem', paddingTop: '0.65rem', borderTop: '1px solid #f1f5f9' }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (b.net < 0) {
+                              setRepaymentPrefill({
+                                from: { type: b.type, id: b.id, name: b.name },
+                                to: null,
+                                amountPaise: Math.abs(b.net),
+                              });
+                            } else {
+                              setRepaymentPrefill({
+                                from: null,
+                                to: { type: b.type, id: b.id, name: b.name },
+                                amountPaise: b.net,
+                              });
+                            }
+                            setShowRepaymentModal(true);
+                          }}
+                          className="btn btn-secondary btn-sm"
+                          style={{ width: '100%', justifyContent: 'center', fontSize: '0.78rem' }}
+                        >
+                          <Scale size={14} /> Settle with {b.name.split(' ')[0]}
+                        </button>
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
           {/* Repayments History */}
           {repayments.length > 0 && (
-            <div className="card-white p-5" style={{ borderRadius: '16px', background: '#ffffff', padding: '1.5rem' }}>
+            <div className="card-white" style={{ borderRadius: '16px', padding: '1.5rem', border: '1px solid #e2e8f0' }}>
               <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#0f172a', marginBottom: '0.85rem', fontFamily: 'var(--font-display)' }}>
                 Recorded Repayments History
               </h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
                 {repayments.map((r: any) => (
                   <div
                     key={r.id}
                     style={{
                       background: '#f8fafc',
                       border: '1px solid #e2e8f0',
-                      padding: '0.75rem 1rem',
-                      borderRadius: '10px',
+                      padding: '0.85rem 1.15rem',
+                      borderRadius: '12px',
                       display: 'flex',
+                      flexWrap: 'wrap',
                       justifyContent: 'space-between',
                       alignItems: 'center',
+                      gap: '0.5rem',
                     }}
                   >
                     <div>
-                      <span style={{ color: '#0f172a' }}><strong>{r.from_name}</strong> repaid <strong>{r.to_name}</strong></span>
-                      {r.reference && <span style={{ color: '#64748b', fontSize: '0.75rem' }}> ({r.reference})</span>}
-                      <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '2px' }}>{r.paid_on}</div>
+                      <div style={{ color: '#0f172a', fontWeight: 600 }}>
+                        <strong style={{ color: '#dc2626' }}>{r.from_name}</strong> repaid <strong style={{ color: '#059669' }}>{r.to_name}</strong>
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>
+                        {r.paid_on} {r.reference && `· Ref: ${r.reference}`} {r.note && `· "${r.note}"`}
+                      </div>
                     </div>
-                    <div style={{ fontWeight: 800, color: '#059669', fontSize: '1.05rem' }}>
+                    <div style={{ fontWeight: 800, color: '#059669', fontSize: '1.15rem' }}>
                       {formatINR(r.amount_paise)}
                     </div>
                   </div>
@@ -542,6 +909,157 @@ export const TripDetail: React.FC<Props> = ({
           }}
           onClose={() => setShowRepaymentModal(false)}
         />
+      )}
+
+      {/* Cover Image Modal (Creator or Super Admin Only) */}
+      {showCoverModal && (
+        <div className="modal-overlay" style={{ zIndex: 1100 }}>
+          <div className="card-white" style={{ width: '100%', maxWidth: '520px', borderRadius: '18px', padding: '1.75rem', position: 'relative' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <Camera size={20} style={{ color: '#0f172a' }} />
+                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700, color: '#0f172a', fontFamily: 'var(--font-display)' }}>
+                  Change Trip Cover Photo
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCoverModal(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '1.25rem' }}>
+              Select a curated cover photo or enter an image URL. This main image will be displayed on the trip banner and dashboard for all members.
+            </p>
+
+            {/* Presets */}
+            <div style={{ marginBottom: '1.25rem' }}>
+              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '0.5rem', textTransform: 'uppercase' }}>
+                Curated Presets
+              </label>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.65rem' }}>
+                {COVER_PRESETS.map(preset => {
+                  const isSelected = coverInput === preset.url;
+                  return (
+                    <div
+                      key={preset.url}
+                      onClick={() => setCoverInput(preset.url)}
+                      style={{
+                        position: 'relative',
+                        height: '75px',
+                        borderRadius: '10px',
+                        overflow: 'hidden',
+                        cursor: 'pointer',
+                        border: isSelected ? '3px solid #0f172a' : '2px solid transparent',
+                        boxShadow: isSelected ? '0 0 0 2px #38bdf8' : 'none',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      <img
+                        src={preset.url}
+                        alt={preset.label}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                      <div style={{
+                        position: 'absolute',
+                        inset: 0,
+                        background: 'linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 70%)',
+                        display: 'flex',
+                        alignItems: 'flex-end',
+                        padding: '4px 6px',
+                        fontSize: '0.65rem',
+                        fontWeight: 600,
+                        color: '#ffffff',
+                      }}>
+                        {preset.label}
+                      </div>
+                      {isSelected && (
+                        <div style={{
+                          position: 'absolute',
+                          top: '4px',
+                          right: '4px',
+                          background: '#0f172a',
+                          color: '#ffffff',
+                          borderRadius: '50%',
+                          width: '18px',
+                          height: '18px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}>
+                          <Check size={12} />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Custom URL Input */}
+            <div style={{ marginBottom: '1.25rem' }}>
+              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '0.4rem', textTransform: 'uppercase' }}>
+                Or Custom Image URL
+              </label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="url"
+                  placeholder="https://example.com/photo.jpg"
+                  value={coverInput}
+                  onChange={(e) => setCoverInput(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '0.65rem 0.85rem 0.65rem 2.2rem',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: '10px',
+                    fontSize: '0.88rem',
+                  }}
+                />
+                <ImageIcon size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+              </div>
+            </div>
+
+            {/* Preview */}
+            {coverInput && (
+              <div style={{ marginBottom: '1.25rem' }}>
+                <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b', marginBottom: '0.35rem' }}>Live Preview:</div>
+                <div style={{ width: '100%', height: '110px', borderRadius: '10px', overflow: 'hidden', border: '1px solid #e2e8f0' }}>
+                  <img
+                    src={coverInput}
+                    alt="Cover Preview"
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = '/images/mountain_resort.jpg';
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Buttons */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+              <button
+                type="button"
+                onClick={() => setShowCoverModal(false)}
+                className="btn btn-secondary"
+                disabled={isUpdatingCover}
+              >
+                {t.cancel}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleUpdateCover(coverInput)}
+                className="btn btn-primary"
+                disabled={isUpdatingCover || !coverInput.trim()}
+              >
+                {isUpdatingCover ? 'Saving...' : 'Save Cover Photo'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -9,6 +9,22 @@ const createPersonSchema = z.object({
   family_id: z.number().int().positive().optional(),
 });
 
+// GET /api/persons/available - Fetch all active members who can be invited to trips
+personsRouter.get('/available', requireAuth, (req: Request, res: Response) => {
+  const persons = req.db.prepare(`
+    SELECT p.id, p.display_name, p.user_id, p.is_active,
+           f.id as family_id, f.name as family_name,
+           u.email, u.role
+    FROM persons p
+    LEFT JOIN family_memberships fm ON fm.person_id = p.id AND fm.left_at IS NULL
+    LEFT JOIN families f ON fm.family_id = f.id
+    LEFT JOIN users u ON p.user_id = u.id
+    WHERE p.is_active = 1
+    ORDER BY p.display_name ASC
+  `).all();
+  res.json(persons);
+});
+
 personsRouter.get('/', requireAuth, (req: Request, res: Response) => {
   if (req.user!.role === 'super_admin') {
     const persons = req.db.prepare(`

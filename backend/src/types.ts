@@ -37,6 +37,7 @@ export interface Trip {
   end_date: string | null;
   description: string | null;
   notes: string | null;
+  cover_image?: string | null;
   budget_paise: number | null;
   status: 'planning' | 'upcoming' | 'ongoing' | 'completed';
   is_private: number;

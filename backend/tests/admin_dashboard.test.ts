@@ -63,11 +63,14 @@ function setupAdminTestEnv() {
     superAdmin,
     superSession,
     famAdminUserId,
+    famAdminPersonId,
     famAdminSession,
     famAId,
     memberUserId,
+    memberPersonId,
     memberSession,
     famBId,
+    famBPersonId,
     tripBId,
     famBAdminSession,
   };
@@ -463,6 +466,106 @@ test('Trip Visiting Places: creation, ordering, and permissions', async () => {
     const finalListData = await finalListRes.json();
     assert.equal(finalListData.places.length, 1);
     assert.equal(finalListData.places[0].name, 'Ooty Lake');
+  } finally {
+    server.close();
+  }
+});
+
+test('Trip Invitation & Custom Cover Photo: available persons discovery and cover image access controls', async () => {
+  const env = setupAdminTestEnv();
+  const app = createApp();
+  const server = app.listen(0);
+  const port = (server.address() as any).port;
+  const baseUrl = `http://localhost:${port}`;
+
+  try {
+    // 1. Available persons endpoint returns all active persons across the site
+    const personsRes = await fetch(`${baseUrl}/api/persons/available`, {
+      headers: { Authorization: `Bearer ${env.famAdminSession.token}` },
+    });
+    assert.equal(personsRes.status, 200);
+    const personsData = await personsRes.json();
+    assert.ok(Array.isArray(personsData));
+    assert.ok(personsData.length >= 3);
+    const names = personsData.map((p: any) => p.display_name);
+    assert.ok(names.includes('Alice Admin'));
+    assert.ok(names.includes('Bob Member'));
+    assert.ok(names.includes('Beta Admin'));
+
+    // 2. Create trip with custom cover photo
+    const createTripRes = await fetch(`${baseUrl}/api/trips`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${env.famAdminSession.token}`,
+      },
+      body: JSON.stringify({
+        name: 'Goa Holiday 2026',
+        destination: 'Goa',
+        cover_image: 'https://example.com/goa.jpg',
+        participant_person_ids: [env.famAdminPersonId, env.memberPersonId, env.famBPersonId],
+      }),
+    });
+    assert.equal(createTripRes.status, 201);
+    const createdTrip = await createTripRes.json();
+    assert.ok(createdTrip.id);
+    const tripId = createdTrip.id;
+
+    // Verify trip was created with the cover image
+    const initialTripRes = await fetch(`${baseUrl}/api/trips/${tripId}`, {
+      headers: { Authorization: `Bearer ${env.famAdminSession.token}` },
+    });
+    assert.equal(initialTripRes.status, 200);
+    const initialTrip = await initialTripRes.json();
+    assert.equal(initialTrip.cover_image, 'https://example.com/goa.jpg');
+    assert.equal(initialTrip.participants.length, 3);
+
+    // 3. Trip creator can update cover photo
+    const updateCoverRes = await fetch(`${baseUrl}/api/trips/${tripId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${env.famAdminSession.token}`,
+      },
+      body: JSON.stringify({
+        cover_image: 'https://example.com/goa-sunset.jpg',
+      }),
+    });
+    assert.equal(updateCoverRes.status, 200);
+
+    // Verify updated cover image
+    const getTripRes = await fetch(`${baseUrl}/api/trips/${tripId}`, {
+      headers: { Authorization: `Bearer ${env.famAdminSession.token}` },
+    });
+    assert.equal(getTripRes.status, 200);
+    const tripData = await getTripRes.json();
+    assert.equal(tripData.cover_image, 'https://example.com/goa-sunset.jpg');
+
+    // 4. Super Admin can also update cover photo
+    const adminCoverRes = await fetch(`${baseUrl}/api/trips/${tripId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${env.superSession.token}`,
+      },
+      body: JSON.stringify({
+        cover_image: 'https://example.com/goa-admin-pick.jpg',
+      }),
+    });
+    assert.equal(adminCoverRes.status, 200);
+
+    // 5. Non-creator/non-admin participant cannot update cover photo
+    const forbiddenCoverRes = await fetch(`${baseUrl}/api/trips/${tripId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${env.memberSession.token}`,
+      },
+      body: JSON.stringify({
+        cover_image: 'https://example.com/hacked.jpg',
+      }),
+    });
+    assert.equal(forbiddenCoverRes.status, 403);
   } finally {
     server.close();
   }

@@ -1,7 +1,20 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useI18n } from '../i18n/context';
 import { api } from '../api/client';
-import { Compass, ShieldAlert, Lock, Check } from 'lucide-react';
+import {
+  Compass,
+  MapPin,
+  Calendar,
+  Wallet,
+  ImageIcon,
+  Users,
+  Check,
+  Lock,
+  Search,
+  Sparkles,
+  AlertCircle,
+  X,
+} from 'lucide-react';
 
 interface Family {
   id: number;
@@ -11,6 +24,9 @@ interface Family {
 interface Person {
   id: number;
   display_name: string;
+  family_id?: number | null;
+  family_name?: string | null;
+  email?: string | null;
 }
 
 interface Props {
@@ -20,9 +36,18 @@ interface Props {
   onClose: () => void;
 }
 
+// Preset photo options from public images
+const PRESET_IMAGES = [
+  { label: 'Mountain Resort', url: '/images/mountain_resort.jpg' },
+  { label: 'Kerala Backwaters', url: '/images/trip-kerala.jpg' },
+  { label: 'Beach Vacation', url: '/images/photo-family-beach.jpg' },
+  { label: 'Sea Shore', url: '/images/beach_vacation.jpg' },
+  { label: 'Family Travel', url: '/images/hero_family_trip.jpg' },
+];
+
 export const TripCreationModal: React.FC<Props> = ({
   families,
-  persons,
+  persons: initialPersons,
   onTripCreated,
   onClose,
 }) => {
@@ -34,20 +59,64 @@ export const TripCreationModal: React.FC<Props> = ({
   const [endDate, setEndDate] = useState('');
   const [budgetRupees, setBudgetRupees] = useState('');
   const [description, setDescription] = useState('');
-  const [notes, setNotes] = useState('');
+  const [coverImage, setCoverImage] = useState('/images/mountain_resort.jpg');
+  const [customImageUrl, setCustomImageUrl] = useState('');
   const [isPrivate, setIsPrivate] = useState(false);
-  const [selectedFamilyIds, setSelectedFamilyIds] = useState<number[]>(families.map(f => f.id));
+
+  // All available members registered on the site
+  const [availablePersons, setAvailablePersons] = useState<Person[]>(initialPersons);
   const [selectedPersonIds, setSelectedPersonIds] = useState<number[]>([]);
+  const [selectedFamilyIds, setSelectedFamilyIds] = useState<number[]>(families.map(f => f.id));
+  const [memberSearch, setMemberSearch] = useState('');
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const toggleFamily = (id: number) => {
-    setSelectedFamilyIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
-  };
+  // Fetch all registered persons across the system so anyone can invite any logged-in user
+  useEffect(() => {
+    const fetchAvailable = async () => {
+      try {
+        const res = await api.get('/persons/available');
+        if (Array.isArray(res) && res.length > 0) {
+          setAvailablePersons(res);
+        }
+      } catch {
+        // fallback to initialPersons
+      }
+    };
+    fetchAvailable();
+  }, []);
 
   const togglePerson = (id: number) => {
-    setSelectedPersonIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+    setSelectedPersonIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const selectAllPersons = () => {
+    setSelectedPersonIds(availablePersons.map(p => p.id));
+  };
+
+  const clearAllPersons = () => {
+    setSelectedPersonIds([]);
+  };
+
+  const toggleFamily = (id: number) => {
+    setSelectedFamilyIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectPresetImage = (url: string) => {
+    setCoverImage(url);
+    setCustomImageUrl('');
+  };
+
+  const handleCustomImageChange = (url: string) => {
+    setCustomImageUrl(url);
+    if (url.trim()) {
+      setCoverImage(url.trim());
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -68,7 +137,7 @@ export const TripCreationModal: React.FC<Props> = ({
         end_date: endDate || undefined,
         budget: budgetRupees.trim() || undefined,
         description: description.trim() || undefined,
-        notes: notes.trim() || undefined,
+        cover_image: coverImage || undefined,
         is_private: isPrivate,
         family_ids: selectedFamilyIds,
         participant_person_ids: selectedPersonIds,
@@ -82,64 +151,117 @@ export const TripCreationModal: React.FC<Props> = ({
     }
   };
 
+  const filteredPersons = availablePersons.filter(p => {
+    if (!memberSearch.trim()) return true;
+    const q = memberSearch.toLowerCase();
+    return (
+      p.display_name.toLowerCase().includes(q) ||
+      (p.email && p.email.toLowerCase().includes(q)) ||
+      (p.family_name && p.family_name.toLowerCase().includes(q))
+    );
+  });
+
   return (
-    <div className="modal-overlay">
-      <div className="modal-content" style={{ maxWidth: '640px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-            <Compass size={24} style={{ color: '#0f172a' }} />
-            <h3 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#0f172a', fontFamily: 'var(--font-display)' }}>{t.createTrip}</h3>
+    <div className="modal-overlay" style={{ zIndex: 1200 }}>
+      <div
+        className="modal-content fade-up"
+        style={{
+          maxWidth: '760px',
+          width: '100%',
+          maxHeight: '92vh',
+          overflowY: 'auto',
+          borderRadius: '20px',
+          padding: '2rem 1.75rem',
+          backgroundColor: '#ffffff',
+          boxShadow: '0 20px 40px rgba(0,0,0,0.18)',
+        }}
+      >
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
+          <div>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', color: '#f59e0b', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem' }}>
+              <Compass size={16} /> New Adventure
+            </div>
+            <h2 style={{ fontSize: '1.75rem', fontWeight: 700, color: '#0f172a', fontFamily: 'var(--font-display)', margin: 0, letterSpacing: '-0.02em' }}>
+              Plan a New Trip
+            </h2>
+            <p style={{ color: '#64748b', fontSize: '0.88rem', margin: '0.25rem 0 0 0' }}>
+              Set destination, travel dates, custom cover photo, and invite family members.
+            </p>
           </div>
-          <button type="button" onClick={onClose} className="btn btn-secondary btn-sm">{t.close}</button>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              background: '#f1f5f9',
+              border: 'none',
+              borderRadius: '50%',
+              width: '34px',
+              height: '34px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#64748b',
+              cursor: 'pointer',
+            }}
+          >
+            <X size={18} />
+          </button>
         </div>
 
         {errorMsg && (
           <div style={{
             background: '#fef2f2',
             border: '1px solid #fecaca',
-            borderRadius: '10px',
+            borderRadius: '12px',
             padding: '0.75rem 1rem',
             color: '#dc2626',
-            fontSize: '0.85rem',
+            fontSize: '0.86rem',
             display: 'flex',
             alignItems: 'center',
             gap: '0.5rem',
-            marginBottom: '1rem',
+            marginBottom: '1.25rem',
           }}>
-            <ShieldAlert size={18} />
+            <AlertCircle size={18} style={{ flexShrink: 0 }} />
             <span>{errorMsg}</span>
           </div>
         )}
 
-        <form onSubmit={handleSubmit}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-            <div className="form-group">
-              <label className="form-label">{t.tripName}</label>
+        <form onSubmit={handleSubmit} style={{ display: 'grid', gap: '1.35rem' }}>
+          {/* Main Info */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem' }}>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label" style={{ fontWeight: 700 }}>{t.tripName} *</label>
               <input
                 type="text"
                 className="form-input"
-                placeholder="e.g. Goa Family Vacation"
+                placeholder="e.g. Manali Summer Getaway 2026"
                 value={name}
                 onChange={e => setName(e.target.value)}
                 required
               />
             </div>
 
-            <div className="form-group">
-              <label className="form-label">{t.destination}</label>
-              <input
-                type="text"
-                className="form-input"
-                placeholder="e.g. Goa / Ooty / Coorg"
-                value={destination}
-                onChange={e => setDestination(e.target.value)}
-              />
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label" style={{ fontWeight: 700 }}>{t.destination}</label>
+              <div style={{ position: 'relative' }}>
+                <MapPin size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                <input
+                  type="text"
+                  className="form-input"
+                  style={{ paddingLeft: '2.4rem' }}
+                  placeholder="e.g. Manali, Himachal Pradesh"
+                  value={destination}
+                  onChange={e => setDestination(e.target.value)}
+                />
+              </div>
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-            <div className="form-group">
-              <label className="form-label">Start Date</label>
+          {/* Dates & Budget */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label" style={{ fontWeight: 700 }}>Start Date</label>
               <input
                 type="date"
                 className="form-input"
@@ -148,8 +270,8 @@ export const TripCreationModal: React.FC<Props> = ({
               />
             </div>
 
-            <div className="form-group">
-              <label className="form-label">End Date</label>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label" style={{ fontWeight: 700 }}>End Date</label>
               <input
                 type="date"
                 className="form-input"
@@ -158,73 +280,276 @@ export const TripCreationModal: React.FC<Props> = ({
               />
             </div>
 
-            <div className="form-group">
-              <label className="form-label">{t.budget} (₹)</label>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label" style={{ fontWeight: 700 }}>{t.budget} (₹)</label>
+              <div style={{ position: 'relative' }}>
+                <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', fontWeight: 700, color: '#94a3b8' }}>₹</span>
+                <input
+                  type="number"
+                  step="1"
+                  min="0"
+                  className="form-input"
+                  style={{ paddingLeft: '2rem' }}
+                  placeholder="50000"
+                  value={budgetRupees}
+                  onChange={e => setBudgetRupees(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Cover Image Selector */}
+          <div style={{
+            background: '#f8fafc',
+            border: '1px solid #e2e8f0',
+            borderRadius: '14px',
+            padding: '1.15rem',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem' }}>
+              <label className="form-label" style={{ margin: 0, fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <ImageIcon size={16} color="#0f172a" /> Trip Main Cover Image
+              </label>
+              <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Customizable by Trip Creator & Admin</span>
+            </div>
+
+            {/* Live Preview Banner */}
+            <div style={{
+              position: 'relative',
+              height: '140px',
+              borderRadius: '12px',
+              overflow: 'hidden',
+              marginBottom: '0.85rem',
+              border: '1px solid #cbd5e1',
+            }}>
+              <img
+                src={coverImage}
+                alt="Cover preview"
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                onError={e => {
+                  (e.target as any).src = '/images/mountain_resort.jpg';
+                }}
+              />
+              <div style={{
+                position: 'absolute',
+                bottom: '10px',
+                left: '12px',
+                background: 'rgba(15, 23, 42, 0.75)',
+                color: '#ffffff',
+                padding: '0.2rem 0.6rem',
+                borderRadius: '6px',
+                fontSize: '0.74rem',
+                fontWeight: 600,
+                backdropFilter: 'blur(4px)',
+              }}>
+                Current Cover Preview
+              </div>
+            </div>
+
+            {/* Presets */}
+            <div style={{ marginBottom: '0.75rem' }}>
+              <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '0.35rem' }}>
+                Choose from Travel Presets:
+              </span>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                {PRESET_IMAGES.map(img => (
+                  <button
+                    key={img.url}
+                    type="button"
+                    onClick={() => handleSelectPresetImage(img.url)}
+                    style={{
+                      padding: '0.3rem 0.7rem',
+                      borderRadius: '8px',
+                      fontSize: '0.78rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      border: coverImage === img.url ? '1.5px solid #0f172a' : '1px solid #cbd5e1',
+                      background: coverImage === img.url ? '#0f172a' : '#ffffff',
+                      color: coverImage === img.url ? '#ffffff' : '#334155',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    {img.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Custom URL Input */}
+            <div>
+              <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '0.3rem' }}>
+                Or Enter Custom Image URL:
+              </span>
               <input
-                type="number"
-                step="1"
-                min="0"
+                type="url"
                 className="form-input"
-                placeholder="e.g. 50000"
-                value={budgetRupees}
-                onChange={e => setBudgetRupees(e.target.value)}
+                placeholder="https://images.unsplash.com/photo-... or custom photo URL"
+                value={customImageUrl}
+                onChange={e => handleCustomImageChange(e.target.value)}
+                style={{ fontSize: '0.84rem' }}
               />
             </div>
           </div>
 
-          <div className="form-group">
-            <label className="form-label">Description & Itinerary</label>
+          {/* Description */}
+          <div className="form-group" style={{ margin: 0 }}>
+            <label className="form-label" style={{ fontWeight: 700 }}>Description & Highlights</label>
             <textarea
               className="form-textarea"
               rows={2}
-              placeholder="Highlights, planned spots, notes..."
+              placeholder="What makes this trip special? Itinerary highlights, planned spots..."
               value={description}
               onChange={e => setDescription(e.target.value)}
             />
           </div>
 
-          {/* Families in Trip */}
-          {families.length > 0 && (
-            <div style={{ marginBottom: '1rem' }}>
-              <label className="form-label">Participating Families</label>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
-                {families.map(f => {
-                  const isSelected = selectedFamilyIds.includes(f.id);
-                  return (
-                    <button
-                      key={f.id}
-                      type="button"
-                      onClick={() => toggleFamily(f.id)}
-                      style={{
-                        padding: '0.35rem 0.75rem',
-                        borderRadius: '9999px',
-                        fontSize: '0.8rem',
-                        fontWeight: 600,
-                        border: isSelected ? '1px solid #0f172a' : '1px solid #e2e8f0',
-                        background: isSelected ? '#0f172a' : '#f8fafc',
-                        color: isSelected ? '#ffffff' : '#64748b',
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '0.3rem',
-                      }}
-                    >
-                      {isSelected && <Check size={14} />}
-                      {f.name}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Privacy Toggle with Clear Explanation */}
+          {/* INVITE MEMBERS (Matching Lovable.app) */}
           <div style={{
             background: '#f8fafc',
             border: '1px solid #e2e8f0',
+            borderRadius: '14px',
+            padding: '1.25rem',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <div>
+                <label className="form-label" style={{ margin: 0, fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.98rem' }}>
+                  <Users size={18} color="#0f172a" />
+                  Invite Members ({selectedPersonIds.length} selected)
+                </label>
+                <p style={{ margin: '0.15rem 0 0 0', fontSize: '0.78rem', color: '#64748b' }}>
+                  Invite any family member or logged-in user on the platform to join this trip.
+                </p>
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.4rem' }}>
+                <button
+                  type="button"
+                  onClick={selectAllPersons}
+                  className="btn btn-secondary btn-sm"
+                  style={{ fontSize: '0.76rem', padding: '0.25rem 0.65rem' }}
+                >
+                  Select All
+                </button>
+                <button
+                  type="button"
+                  onClick={clearAllPersons}
+                  className="btn btn-secondary btn-sm"
+                  style={{ fontSize: '0.76rem', padding: '0.25rem 0.65rem', color: '#dc2626' }}
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+
+            {/* Member search bar */}
+            <div style={{ position: 'relative', marginBottom: '0.85rem' }}>
+              <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+              <input
+                type="text"
+                placeholder="Search registered members by name or email..."
+                value={memberSearch}
+                onChange={e => setMemberSearch(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '0.55rem 1rem 0.55rem 2.2rem',
+                  borderRadius: '10px',
+                  border: '1px solid #cbd5e1',
+                  fontSize: '0.84rem',
+                  background: '#ffffff',
+                  outline: 'none',
+                }}
+              />
+            </div>
+
+            {/* Member cards grid */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))',
+              gap: '0.65rem',
+              maxHeight: '220px',
+              overflowY: 'auto',
+              paddingRight: '4px',
+            }}>
+              {filteredPersons.map(p => {
+                const isSelected = selectedPersonIds.includes(p.id);
+                return (
+                  <div
+                    key={p.id}
+                    onClick={() => togglePerson(p.id)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '0.6rem 0.85rem',
+                      borderRadius: '10px',
+                      background: isSelected ? '#ffffff' : '#f1f5f9',
+                      border: isSelected ? '1.5px solid #0f172a' : '1px solid #e2e8f0',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                      boxShadow: isSelected ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', minWidth: 0 }}>
+                      <div style={{
+                        width: '32px',
+                        height: '32px',
+                        borderRadius: '50%',
+                        background: isSelected ? '#0f172a' : '#cbd5e1',
+                        color: isSelected ? '#ffffff' : '#475569',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontWeight: 700,
+                        fontSize: '0.85rem',
+                        flexShrink: 0,
+                      }}>
+                        {p.display_name.charAt(0).toUpperCase()}
+                      </div>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{
+                          fontWeight: 700,
+                          fontSize: '0.85rem',
+                          color: '#0f172a',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}>
+                          {p.display_name}
+                        </div>
+                        {p.family_name && (
+                          <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                            {p.family_name}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div style={{
+                      width: '20px',
+                      height: '20px',
+                      borderRadius: '6px',
+                      border: isSelected ? '1px solid #0f172a' : '1px solid #cbd5e1',
+                      background: isSelected ? '#0f172a' : '#ffffff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#ffffff',
+                      flexShrink: 0,
+                      marginLeft: '0.5rem',
+                    }}>
+                      {isSelected && <Check size={14} />}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Privacy Toggle */}
+          <div style={{
+            background: '#ffffff',
+            border: '1px solid #e2e8f0',
             borderRadius: '12px',
             padding: '0.85rem 1rem',
-            marginBottom: '1.5rem',
             display: 'flex',
             alignItems: 'flex-start',
             gap: '0.75rem',
@@ -234,23 +559,39 @@ export const TripCreationModal: React.FC<Props> = ({
               id="privateTripToggle"
               checked={isPrivate}
               onChange={e => setIsPrivate(e.target.checked)}
-              style={{ marginTop: '0.25rem' }}
+              style={{ marginTop: '0.25rem', width: '16px', height: '16px', cursor: 'pointer' }}
             />
             <div>
-              <label htmlFor="privateTripToggle" style={{ fontWeight: 700, fontSize: '0.9rem', color: '#0f172a', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <label htmlFor="privateTripToggle" style={{ fontWeight: 700, fontSize: '0.88rem', color: '#0f172a', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                 <Lock size={15} style={{ color: '#f59e0b' }} />
                 {t.privateTrip}
               </label>
-              <p style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '0.2rem' }}>
-                When marked completed, only attendees who actually came (RSVP: Coming) or trip admins can view this trip's financials and history.
+              <p style={{ fontSize: '0.78rem', color: '#64748b', margin: '0.2rem 0 0 0' }}>
+                When marked completed, only attendees who confirmed attendance or trip administrators can view photos and financials.
               </p>
             </div>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
-            <button type="button" onClick={onClose} className="btn btn-secondary">{t.cancel}</button>
-            <button type="submit" disabled={isSubmitting} className="btn btn-primary">
-              {isSubmitting ? t.loading : t.createTrip}
+          {/* Form Actions */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
+            <button type="button" onClick={onClose} className="btn btn-secondary">
+              {t.cancel}
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="btn btn-primary"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                padding: '0.75rem 1.75rem',
+                fontSize: '0.95rem',
+                fontWeight: 700,
+              }}
+            >
+              <Sparkles size={16} />
+              {isSubmitting ? t.loading : 'Create Trip & Invite Members'}
             </button>
           </div>
         </form>

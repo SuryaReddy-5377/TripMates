@@ -13,6 +13,8 @@ import {
   X,
   User,
   ArrowRight,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 
 interface RememberedAccount {
@@ -38,6 +40,7 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess }) =>
   // Form fields
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [displayName, setDisplayName] = useState('');
   const [inviteCode, setInviteCode] = useState('');
 
@@ -910,17 +913,41 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess }) =>
                   </span>
                 )}
               </div>
-              <input
-                type="password"
-                id="auth-password"
-                ref={passwordInputRef}
-                className="form-input"
-                placeholder="••••••••••••"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                minLength={6}
-                required
-              />
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  id="auth-password"
+                  ref={passwordInputRef}
+                  className="form-input"
+                  placeholder="••••••••••••"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  minLength={6}
+                  required
+                  style={{ paddingRight: '2.5rem', width: '100%' }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(prev => !prev)}
+                  title={showPassword ? 'Hide password' : 'Show password'}
+                  style={{
+                    position: 'absolute',
+                    right: '10px',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: '#64748b',
+                    padding: '4px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.color = '#0f172a')}
+                  onMouseLeave={e => (e.currentTarget.style.color = '#64748b')}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
             </div>
 
             {/* Submit Button */}

@@ -223,7 +223,7 @@ export const Dashboard: React.FC<Props> = ({
               <div style={{
                 height: '140px',
                 backgroundImage: `linear-gradient(to bottom, rgba(15, 23, 42, 0.25) 0%, rgba(15, 23, 42, 0.8) 100%), url(${
-                  trip.id % 2 === 0 ? '/images/photo-family-beach.jpg' : '/images/trip-kerala.jpg'
+                  trip.cover_image || (trip.id % 2 === 0 ? '/images/mountain_resort.jpg' : '/images/trip-kerala.jpg')
                 })`,
                 backgroundSize: 'cover',
                 backgroundPosition: 'center',
