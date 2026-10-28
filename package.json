@@ -13,6 +13,8 @@
     "typecheck:frontend": "tsc -p frontend/tsconfig.json",
     "build": "vite build",
     "dev": "tsx backend/src/index.ts",
+    "dev:backend": "tsx backend/src/index.ts",
+    "dev:frontend": "vite",
     "start": "tsx backend/src/index.ts",
     "setup-admin": "tsx backend/src/cli/setup-admin.ts",
     "package": "tsx backend/src/cli/package-app.ts"

@@ -354,3 +354,129 @@ tripsRouter.post('/:tripId/families', requireAuth, requireTripAccess('tripId'), 
 
   res.json({ message: 'Family and members added to trip' });
 });
+
+// ----------------------------------------------------------------------------
+// TRIP VISITING PLACES & ROUTE ITINERARY
+// ----------------------------------------------------------------------------
+
+const createPlaceSchema = z.object({
+  name: z.string().trim().min(1).max(150),
+  latitude: z.number().min(-90).max(90),
+  longitude: z.number().min(-180).max(180),
+  notes: z.string().trim().max(500).optional().nullable(),
+  planned_date: z.string().trim().optional().nullable(),
+});
+
+// GET /api/trips/:tripId/places - Retrieve all visiting places in itinerary order
+tripsRouter.get('/:tripId/places', requireAuth, requireTripAccess('tripId'), (req: Request, res: Response) => {
+  const trip = req.trip!;
+  const places = req.db.prepare(`
+    SELECT tp.id, tp.trip_id, tp.name, tp.latitude, tp.longitude,
+           tp.order_index, tp.notes, tp.planned_date, tp.created_by,
+           tp.created_at, tp.updated_at,
+           u.email as creator_email
+    FROM trip_places tp
+    LEFT JOIN users u ON tp.created_by = u.id
+    WHERE tp.trip_id = ?
+    ORDER BY tp.order_index ASC, tp.id ASC
+  `).all(trip.id);
+
+  const canEdit = req.user!.role === 'super_admin' || trip.created_by === req.user!.id;
+
+  res.json({
+    places,
+    canEdit,
+    tripId: trip.id,
+    destination: trip.destination,
+  });
+});
+
+// POST /api/trips/:tripId/places - Add a new visiting place (authorized trip creator or super admin only)
+tripsRouter.post('/:tripId/places', requireAuth, requireTripAccess('tripId'), (req: Request, res: Response) => {
+  const trip = req.trip!;
+  const isAuthorized = req.user!.role === 'super_admin' || trip.created_by === req.user!.id;
+  if (!isAuthorized) {
+    res.status(403).json({ error: 'FORBIDDEN', message: 'Only the trip creator or super admin can edit trip route and places' });
+    return;
+  }
+
+  const parseResult = createPlaceSchema.safeParse(req.body);
+  if (!parseResult.success) {
+    res.status(400).json({ error: 'VALIDATION_ERROR', details: parseResult.error.format() });
+    return;
+  }
+
+  const { name, latitude, longitude, notes, planned_date } = parseResult.data;
+
+  // Compute next order index
+  const maxOrderRow = req.db.prepare(`
+    SELECT COALESCE(MAX(order_index), -1) as max_order
+    FROM trip_places
+    WHERE trip_id = ?
+  `).get(trip.id) as { max_order: number };
+
+  const nextOrder = maxOrderRow.max_order + 1;
+
+  const insertRes = req.db.prepare(`
+    INSERT INTO trip_places (trip_id, name, latitude, longitude, order_index, notes, planned_date, created_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(trip.id, name, latitude, longitude, nextOrder, notes || null, planned_date || null, req.user!.id);
+
+  const newPlace = req.db.prepare('SELECT * FROM trip_places WHERE id = ?').get(insertRes.lastInsertRowid);
+  res.status(201).json(newPlace);
+});
+
+// PUT /api/trips/:tripId/places/reorder - Reorder visiting places (authorized trip creator or super admin only)
+tripsRouter.put('/:tripId/places/reorder', requireAuth, requireTripAccess('tripId'), (req: Request, res: Response) => {
+  const trip = req.trip!;
+  const isAuthorized = req.user!.role === 'super_admin' || trip.created_by === req.user!.id;
+  if (!isAuthorized) {
+    res.status(403).json({ error: 'FORBIDDEN', message: 'Only the trip creator or super admin can reorder trip places' });
+    return;
+  }
+
+  const { place_ids } = req.body;
+  if (!Array.isArray(place_ids)) {
+    res.status(400).json({ error: 'BAD_REQUEST', message: 'place_ids array is required' });
+    return;
+  }
+
+  withTransaction(req.db, () => {
+    place_ids.forEach((placeId, index) => {
+      req.db.prepare(`
+        UPDATE trip_places
+        SET order_index = ?, updated_at = datetime('now')
+        WHERE id = ? AND trip_id = ?
+      `).run(index, Number(placeId), trip.id);
+    });
+  });
+
+  const updatedPlaces = req.db.prepare(`
+    SELECT * FROM trip_places
+    WHERE trip_id = ?
+    ORDER BY order_index ASC, id ASC
+  `).all(trip.id);
+
+  res.json({ message: 'Places reordered successfully', places: updatedPlaces });
+});
+
+// DELETE /api/trips/:tripId/places/:placeId - Remove a visiting place (authorized trip creator or super admin only)
+tripsRouter.delete('/:tripId/places/:placeId', requireAuth, requireTripAccess('tripId'), (req: Request, res: Response) => {
+  const trip = req.trip!;
+  const isAuthorized = req.user!.role === 'super_admin' || trip.created_by === req.user!.id;
+  if (!isAuthorized) {
+    res.status(403).json({ error: 'FORBIDDEN', message: 'Only the trip creator or super admin can remove trip places' });
+    return;
+  }
+
+  const placeId = Number(req.params.placeId);
+  const existing = req.db.prepare('SELECT id FROM trip_places WHERE id = ? AND trip_id = ?').get(placeId, trip.id);
+  if (!existing) {
+    res.status(404).json({ error: 'NOT_FOUND', message: 'Visiting place not found for this trip' });
+    return;
+  }
+
+  req.db.prepare('DELETE FROM trip_places WHERE id = ? AND trip_id = ?').run(placeId, trip.id);
+  res.json({ message: 'Visiting place removed successfully', id: placeId });
+});
+

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useI18n } from '../i18n/context';
 import { api } from '../api/client';
 import {
@@ -7,12 +7,19 @@ import {
   Camera,
   Receipt,
   ShieldCheck,
-  ArrowLeft,
   Sparkles,
   AlertCircle,
-  KeyRound,
   UserCheck,
+  X,
+  User,
+  ArrowRight,
 } from 'lucide-react';
+
+interface RememberedAccount {
+  email: string;
+  displayName: string;
+  lastUsed: string;
+}
 
 interface Props {
   hasSuperAdmin: boolean;
@@ -20,7 +27,7 @@ interface Props {
   onNavigateToAdmin?: () => void;
 }
 
-export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess, onNavigateToAdmin }) => {
+export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess }) => {
   const { t, language, setLanguage } = useI18n();
 
   // 'landing' shows the full-bleed hero page matching lovable.app
@@ -36,6 +43,88 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess, onNa
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Remembered accounts on this device (identifier and display name only, NO secrets or passwords)
+  const [rememberedAccounts, setRememberedAccounts] = useState<RememberedAccount[]>([]);
+  const [selectedAccount, setSelectedAccount] = useState<RememberedAccount | null>(null);
+  const passwordInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('tripmates_remembered_accounts');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          setRememberedAccounts(parsed);
+          if (parsed.length > 0) {
+            setSelectedAccount(parsed[0]);
+            setEmail(parsed[0].email);
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const saveRememberedAccount = (accEmail: string, accName?: string) => {
+    try {
+      const raw = localStorage.getItem('tripmates_remembered_accounts');
+      const list: RememberedAccount[] = raw ? JSON.parse(raw) : [];
+      const cleanEmail = accEmail.trim().toLowerCase();
+      const filtered = list.filter(a => a.email.toLowerCase() !== cleanEmail);
+      const updated: RememberedAccount = {
+        email: cleanEmail,
+        displayName: (accName || cleanEmail.split('@')[0]).trim(),
+        lastUsed: new Date().toISOString(),
+      };
+      filtered.unshift(updated);
+      const clamped = filtered.slice(0, 5);
+      localStorage.setItem('tripmates_remembered_accounts', JSON.stringify(clamped));
+      setRememberedAccounts(clamped);
+      setSelectedAccount(updated);
+    } catch {
+      // ignore
+    }
+  };
+
+  const removeRememberedAccount = (accEmail: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const cleanEmail = accEmail.trim().toLowerCase();
+      const filtered = rememberedAccounts.filter(a => a.email.toLowerCase() !== cleanEmail);
+      localStorage.setItem('tripmates_remembered_accounts', JSON.stringify(filtered));
+      setRememberedAccounts(filtered);
+      if (selectedAccount && selectedAccount.email.toLowerCase() === cleanEmail) {
+        if (filtered.length > 0) {
+          setSelectedAccount(filtered[0]);
+          setEmail(filtered[0].email);
+        } else {
+          setSelectedAccount(null);
+          setEmail('');
+        }
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleSelectAccount = (account: RememberedAccount) => {
+    setSelectedAccount(account);
+    setEmail(account.email);
+    setPassword('');
+    setErrorMsg(null);
+    setTimeout(() => {
+      passwordInputRef.current?.focus();
+    }, 50);
+  };
+
+  const handleClearSelectedAccount = () => {
+    setSelectedAccount(null);
+    setEmail('');
+    setPassword('');
+    setErrorMsg(null);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,6 +142,7 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess, onNa
         if (res.token) {
           localStorage.setItem('tripmates_token', res.token);
         }
+        saveRememberedAccount(email, displayName);
         onAuthSuccess(res);
       } else if (tab === 'register') {
         // Register with invite code
@@ -65,6 +155,7 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess, onNa
         if (res.token) {
           localStorage.setItem('tripmates_token', res.token);
         }
+        saveRememberedAccount(email, displayName);
         onAuthSuccess(res);
       } else {
         // Regular email/password login
@@ -75,6 +166,7 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess, onNa
         if (res.token) {
           localStorage.setItem('tripmates_token', res.token);
         }
+        saveRememberedAccount(email, res.person?.display_name || email.split('@')[0]);
         onAuthSuccess(res);
       }
     } catch (err: any) {
@@ -84,24 +176,8 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess, onNa
     }
   };
 
-  const handleQuickLogin = async (targetEmail: string) => {
-    setErrorMsg(null);
-    setIsSubmitting(true);
-    try {
-      const res = await api.post('/auth/quick-login', { email: targetEmail });
-      if (res.token) {
-        localStorage.setItem('tripmates_token', res.token);
-      }
-      onAuthSuccess(res);
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Quick login failed');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   // =========================================================================
-  // 1. LANDING HERO SCREEN (Exact match with lovable.app)
+  // 1. LANDING HERO SCREEN
   // =========================================================================
   if (view === 'landing') {
     return (
@@ -188,32 +264,36 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess, onNa
             }}>
               <button
                 type="button"
+                id="landing-lang-en"
                 onClick={() => setLanguage('en')}
                 style={{
                   background: language === 'en' ? '#ffffff' : 'transparent',
                   color: language === 'en' ? '#0f172a' : '#f8fafc',
                   border: 'none',
-                  padding: '0.25rem 0.65rem',
+                  padding: '0.3rem 0.75rem',
                   borderRadius: '6px',
-                  fontSize: '0.78rem',
+                  fontSize: '0.8rem',
                   fontWeight: 700,
                   cursor: 'pointer',
+                  transition: 'all 0.15s ease',
                 }}
               >
                 EN
               </button>
               <button
                 type="button"
+                id="landing-lang-te"
                 onClick={() => setLanguage('te')}
                 style={{
                   background: language === 'te' ? '#ffffff' : 'transparent',
                   color: language === 'te' ? '#0f172a' : '#f8fafc',
                   border: 'none',
-                  padding: '0.25rem 0.65rem',
+                  padding: '0.3rem 0.75rem',
                   borderRadius: '6px',
-                  fontSize: '0.78rem',
+                  fontSize: '0.8rem',
                   fontWeight: 700,
                   cursor: 'pointer',
+                  transition: 'all 0.15s ease',
                 }}
               >
                 తెలుగు
@@ -238,20 +318,20 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess, onNa
               marginBottom: '1rem',
               border: '1px solid rgba(255, 255, 255, 0.2)',
             }}>
-              <Lock size={14} /> Private · family invitation only
+              <Lock size={14} /> {t.heroBadge}
             </p>
 
             {/* Editorial Serif Headline */}
             <h1 style={{
               fontFamily: 'var(--font-display)',
-              fontSize: 'clamp(2.5rem, 5vw, 3.8rem)',
+              fontSize: 'clamp(2.3rem, 5vw, 3.8rem)',
               fontWeight: 600,
-              lineHeight: 1.08,
+              lineHeight: 1.1,
               color: '#ffffff',
               letterSpacing: '-0.025em',
               marginBottom: '1rem',
             }}>
-              Every trip, every photo, every rupee — together.
+              {t.heroHeadline}
             </h1>
 
             {/* Subtitle */}
@@ -263,7 +343,7 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess, onNa
               marginBottom: '2rem',
               maxWidth: '560px',
             }}>
-              Plan our next getaway, keep photos in full original quality, and settle up fairly without the spreadsheet.
+              {t.heroSubtitle}
             </p>
 
             {/* Main Action Buttons */}
@@ -276,6 +356,7 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess, onNa
             }}>
               <button
                 type="button"
+                id="hero-signin-btn"
                 onClick={() => {
                   setTab('signin');
                   setView('auth');
@@ -298,11 +379,12 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess, onNa
                 onMouseEnter={e => (e.currentTarget.style.transform = 'translateY(-2px)')}
                 onMouseLeave={e => (e.currentTarget.style.transform = 'translateY(0)')}
               >
-                Sign in
+                {t.signIn}
               </button>
 
               <button
                 type="button"
+                id="hero-invite-btn"
                 onClick={() => {
                   setTab('register');
                   setView('auth');
@@ -325,7 +407,7 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess, onNa
                 onMouseEnter={e => (e.currentTarget.style.transform = 'translateY(-2px)')}
                 onMouseLeave={e => (e.currentTarget.style.transform = 'translateY(0)')}
               >
-                I have an invite code
+                {t.haveInviteCode}
               </button>
             </div>
 
@@ -342,13 +424,13 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess, onNa
               fontWeight: 500,
             }}>
               <li style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <Camera size={16} /> Original photos
+                <Camera size={16} /> {t.featureOriginalPhotos}
               </li>
               <li style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <Receipt size={16} /> Fair splits
+                <Receipt size={16} /> {t.featureFairSplits}
               </li>
               <li style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <MapPinned size={16} /> All our trips
+                <MapPinned size={16} /> {t.featureAllTrips}
               </li>
             </ul>
           </div>
@@ -358,7 +440,7 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess, onNa
   }
 
   // =========================================================================
-  // 2. AUTH SCREEN (Exact 2-column split matching lovable.app/auth)
+  // 2. AUTH SCREEN (Sign in / Register)
   // =========================================================================
   return (
     <div style={{
@@ -426,7 +508,7 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess, onNa
             lineHeight: 1.25,
             letterSpacing: '-0.02em',
           }}>
-            &quot;The houseboat morning — Ammamma still talks about it.&quot;
+            {t.ammammaQuote}
           </p>
           <p style={{
             marginTop: '0.65rem',
@@ -434,7 +516,7 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess, onNa
             color: 'rgba(255, 255, 255, 0.85)',
             fontWeight: 500,
           }}>
-            Kerala Backwaters · April 2026
+            {t.ammammaLocation}
           </p>
         </div>
       </div>
@@ -448,7 +530,7 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess, onNa
         boxSizing: 'border-box',
       }}>
         {/* Top Header: Back to Home + Language */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
           <button
             type="button"
             onClick={() => setView('landing')}
@@ -492,6 +574,7 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess, onNa
           }}>
             <button
               type="button"
+              id="auth-lang-en"
               onClick={() => setLanguage('en')}
               style={{
                 background: language === 'en' ? '#0f172a' : 'transparent',
@@ -508,6 +591,7 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess, onNa
             </button>
             <button
               type="button"
+              id="auth-lang-te"
               onClick={() => setLanguage('te')}
               style={{
                 background: language === 'te' ? '#0f172a' : 'transparent',
@@ -530,34 +614,34 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess, onNa
           width: '100%',
           maxWidth: '420px',
           margin: 'auto',
-          padding: '1rem 0',
+          padding: '0.5rem 0 2rem 0',
         }}>
           {/* Headline */}
           <h1 style={{
             fontFamily: 'var(--font-display)',
-            fontSize: '2rem',
+            fontSize: '1.9rem',
             fontWeight: 700,
             color: '#0f172a',
             letterSpacing: '-0.025em',
             marginBottom: '0.35rem',
           }}>
             {!hasSuperAdmin
-              ? 'Welcome to TripMates'
+              ? t.appName
               : tab === 'signin'
-              ? 'Welcome back'
-              : 'Join our family'}
+              ? t.welcomeBack
+              : t.joinFamily}
           </h1>
 
           <p style={{
-            fontSize: '0.95rem',
+            fontSize: '0.92rem',
             color: '#64748b',
-            marginBottom: '1.75rem',
+            marginBottom: '1.5rem',
           }}>
             {!hasSuperAdmin
-              ? 'Initialize the primary Super Administrator account to begin.'
+              ? t.initialSetupDesc
               : tab === 'signin'
-              ? 'Sign in to see our trips, photos and balances.'
-              : 'Enter your invitation code to access your family trips.'}
+              ? t.welcomeSubtitle
+              : t.joinFamilySubtitle}
           </p>
 
           {/* First-time setup alert */}
@@ -576,8 +660,8 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess, onNa
             }}>
               <Sparkles size={18} style={{ flexShrink: 0, marginTop: '2px', color: '#3b82f6' }} />
               <div>
-                <strong>Initial Setup Mode</strong>
-                <p style={{ marginTop: '0.2rem', margin: 0 }}>Create your Super Administrator credentials to manage families, trips, and system access.</p>
+                <strong>{t.initialSetupMode}</strong>
+                <p style={{ marginTop: '0.2rem', margin: 0 }}>{t.initialSetupDesc}</p>
               </div>
             </div>
           )}
@@ -590,10 +674,11 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess, onNa
               background: '#f1f5f9',
               padding: '4px',
               borderRadius: '12px',
-              marginBottom: '1.75rem',
+              marginBottom: '1.5rem',
             }}>
               <button
                 type="button"
+                id="tab-signin-btn"
                 onClick={() => {
                   setTab('signin');
                   setErrorMsg(null);
@@ -611,11 +696,12 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess, onNa
                   transition: 'all 0.15s ease',
                 }}
               >
-                Sign in
+                {t.signIn}
               </button>
 
               <button
                 type="button"
+                id="tab-register-btn"
                 onClick={() => {
                   setTab('register');
                   setErrorMsg(null);
@@ -633,8 +719,117 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess, onNa
                   transition: 'all 0.15s ease',
                 }}
               >
-                Register
+                {t.register}
               </button>
+            </div>
+          )}
+
+          {/* Remembered Accounts Section (Quick Login) */}
+          {hasSuperAdmin && tab === 'signin' && rememberedAccounts.length > 0 && (
+            <div style={{
+              marginBottom: '1.35rem',
+              padding: '0.85rem',
+              borderRadius: '12px',
+              background: '#f8fafc',
+              border: '1px solid #e2e8f0',
+            }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: '0.65rem',
+              }}>
+                <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  {t.rememberedOnDevice}
+                </span>
+                {selectedAccount && (
+                  <button
+                    type="button"
+                    onClick={handleClearSelectedAccount}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      fontSize: '0.74rem',
+                      color: '#2563eb',
+                      cursor: 'pointer',
+                      padding: 0,
+                      fontWeight: 600,
+                    }}
+                  >
+                    {t.useDifferentAccount}
+                  </button>
+                )}
+              </div>
+
+              <div style={{ display: 'grid', gap: '0.45rem' }}>
+                {rememberedAccounts.map((acc) => {
+                  const isSelected = selectedAccount?.email.toLowerCase() === acc.email.toLowerCase();
+                  return (
+                    <div
+                      key={acc.email}
+                      onClick={() => handleSelectAccount(acc)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '0.55rem 0.75rem',
+                        borderRadius: '8px',
+                        background: isSelected ? '#ffffff' : 'transparent',
+                        border: isSelected ? '1.5px solid #0f172a' : '1px solid #cbd5e1',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                        boxShadow: isSelected ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', overflow: 'hidden' }}>
+                        <div style={{
+                          width: '28px',
+                          height: '28px',
+                          borderRadius: '50%',
+                          background: isSelected ? '#0f172a' : '#e2e8f0',
+                          color: isSelected ? '#ffffff' : '#475569',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '0.8rem',
+                          fontWeight: 700,
+                          flexShrink: 0,
+                        }}>
+                          {acc.displayName.charAt(0).toUpperCase()}
+                        </div>
+                        <div style={{ minWidth: 0 }}>
+                          <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 600, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {acc.displayName}
+                          </p>
+                          <p style={{ margin: 0, fontSize: '0.74rem', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {acc.email}
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        title={t.removeAccount}
+                        onClick={(e) => removeRememberedAccount(acc.email, e)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#94a3b8',
+                          cursor: 'pointer',
+                          padding: '4px',
+                          borderRadius: '4px',
+                          display: 'flex',
+                          alignItems: 'center',
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.color = '#ef4444')}
+                        onMouseLeave={e => (e.currentTarget.style.color = '#94a3b8')}
+                      >
+                        <X size={15} />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 
@@ -662,11 +857,12 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess, onNa
             {/* If Registering with Invite Code */}
             {tab === 'register' && hasSuperAdmin && (
               <div className="form-group" style={{ margin: 0 }}>
-                <label className="form-label">Invitation Code</label>
+                <label className="form-label">{t.invitationCode}</label>
                 <input
                   type="text"
+                  id="auth-invite-code"
                   className="form-input"
-                  placeholder="e.g. TRIP-789A"
+                  placeholder="e.g. TRIP-789A or FAM-1234"
                   value={inviteCode}
                   onChange={e => setInviteCode(e.target.value.toUpperCase())}
                   required
@@ -677,9 +873,10 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess, onNa
             {/* Display Name (if setup or registering) */}
             {(!hasSuperAdmin || tab === 'register') && (
               <div className="form-group" style={{ margin: 0 }}>
-                <label className="form-label">Full Name</label>
+                <label className="form-label">{t.fullName}</label>
                 <input
                   type="text"
+                  id="auth-fullname"
                   className="form-input"
                   placeholder="e.g. Surya Narayana"
                   value={displayName}
@@ -691,9 +888,10 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess, onNa
 
             {/* Email Address */}
             <div className="form-group" style={{ margin: 0 }}>
-              <label className="form-label">Email</label>
+              <label className="form-label">{t.email}</label>
               <input
                 type="email"
+                id="auth-email"
                 className="form-input"
                 placeholder="name@example.com"
                 value={email}
@@ -705,15 +903,17 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess, onNa
             {/* Password */}
             <div className="form-group" style={{ margin: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <label className="form-label">Password</label>
+                <label className="form-label">{t.password}</label>
                 {tab === 'signin' && (
                   <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                    Standard family login
+                    {t.standardFamilyLogin}
                   </span>
                 )}
               </div>
               <input
                 type="password"
+                id="auth-password"
+                ref={passwordInputRef}
                 className="form-input"
                 placeholder="••••••••••••"
                 value={password}
@@ -726,6 +926,7 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess, onNa
             {/* Submit Button */}
             <button
               type="submit"
+              id="auth-submit-btn"
               disabled={isSubmitting}
               className="btn btn-primary"
               style={{
@@ -739,64 +940,12 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess, onNa
               {isSubmitting
                 ? t.loading
                 : !hasSuperAdmin
-                ? 'Complete Setup & Launch'
+                ? t.completeSetupLaunch
                 : tab === 'register'
-                ? 'Register & Join Trip'
-                : 'Sign in'}
+                ? t.registerAndJoinTrip
+                : t.signIn}
             </button>
           </form>
-
-          {/* Quick 1-Click Sign-in for Surya / existing Super Admin */}
-          {hasSuperAdmin && tab === 'signin' && (
-            <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.75rem',
-                color: '#94a3b8',
-                fontSize: '0.78rem',
-                marginBottom: '1rem',
-              }}>
-                <span style={{ height: '1px', flex: 1, background: '#e2e8f0' }} />
-                <span>Quick Sign-In Helper</span>
-                <span style={{ height: '1px', flex: 1, background: '#e2e8f0' }} />
-              </div>
-
-              <button
-                type="button"
-                onClick={() => handleQuickLogin('suryareddy1596@gmail.com')}
-                disabled={isSubmitting}
-                style={{
-                  width: '100%',
-                  padding: '0.75rem 1rem',
-                  background: '#ffffff',
-                  border: '1px solid #cbd5e1',
-                  borderRadius: '12px',
-                  color: '#0f172a',
-                  fontSize: '0.88rem',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '0.5rem',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-                  transition: 'all 0.15s ease',
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.borderColor = '#0f172a';
-                  e.currentTarget.style.background = '#f8fafc';
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.borderColor = '#cbd5e1';
-                  e.currentTarget.style.background = '#ffffff';
-                }}
-              >
-                <UserCheck size={16} color="#0f172a" />
-                Sign in as Surya (surya reddy)
-              </button>
-            </div>
-          )}
 
           {/* Footer Security Note */}
           <p style={{
@@ -809,35 +958,8 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess, onNa
             lineHeight: 1.5,
           }}>
             <ShieldCheck size={16} style={{ color: '#10b981', flexShrink: 0, marginTop: '2px' }} />
-            Only invited family members can join. Photos and expenses are visible only to people on each trip.
+            {t.privateSecurityFooter}
           </p>
-
-          {onNavigateToAdmin && (
-            <div style={{ marginTop: '1.25rem', textAlign: 'center' }}>
-              <button
-                type="button"
-                onClick={onNavigateToAdmin}
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: '#94a3b8',
-                  fontSize: '0.76rem',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.35rem',
-                  textDecoration: 'underline',
-                  transition: 'color 0.15s ease',
-                }}
-                onMouseEnter={e => (e.currentTarget.style.color = '#0f172a')}
-                onMouseLeave={e => (e.currentTarget.style.color = '#94a3b8')}
-              >
-                <Lock size={12} />
-                <span>Super Admin Portal</span>
-              </button>
-            </div>
-          )}
         </div>
       </div>
     </div>

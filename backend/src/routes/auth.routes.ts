@@ -221,6 +221,99 @@ authRouter.post('/register-invite', (req: Request, res: Response) => {
   }
   const { invite_code, email, password, displayName } = parseResult.data;
 
+  // 1. Check family_invite_codes table first
+  const famCode = req.db.prepare(`
+    SELECT * FROM family_invite_codes
+    WHERE code = ? COLLATE NOCASE
+  `).get(invite_code) as any;
+
+  if (famCode) {
+    if (famCode.status !== 'active') {
+      res.status(400).json({ error: 'CODE_INACTIVE', message: 'This family invite code has been revoked or exhausted.' });
+      return;
+    }
+    if (famCode.expires_at && new Date(famCode.expires_at) < new Date()) {
+      res.status(400).json({ error: 'CODE_EXPIRED', message: 'This family invite code has expired.' });
+      return;
+    }
+    if (famCode.uses_count >= famCode.max_uses) {
+      res.status(400).json({ error: 'CODE_EXHAUSTED', message: 'This family invite code has reached its maximum usage limit.' });
+      return;
+    }
+
+    const existingUser = req.db.prepare('SELECT id FROM users WHERE email = ? COLLATE NOCASE').get(email);
+    if (existingUser) {
+      res.status(400).json({ error: 'USER_EXISTS', message: 'An account with this email already exists. Please sign in instead.' });
+      return;
+    }
+
+    const hashedPassword = hashPassword(password);
+
+    try {
+      const result = withTransaction(req.db, () => {
+        // Concurrency-safe atomic check and update of usage limit inside transaction
+        const updated = req.db.prepare(`
+          UPDATE family_invite_codes
+          SET uses_count = uses_count + 1,
+              status = CASE WHEN uses_count + 1 >= max_uses THEN 'exhausted' ELSE status END
+          WHERE id = ? AND status = 'active' AND uses_count < max_uses
+        `).run(famCode.id);
+
+        if (updated.changes === 0) {
+          throw new Error('This invite code usage limit was exceeded or is no longer active.');
+        }
+
+        const userRes = req.db.prepare(`
+          INSERT INTO users (email, password_hash, role)
+          VALUES (?, ?, 'member')
+        `).run(email, hashedPassword);
+        const userId = Number(userRes.lastInsertRowid);
+
+        const personRes = req.db.prepare(`
+          INSERT INTO persons (display_name, user_id)
+          VALUES (?, ?)
+        `).run(displayName, userId);
+        const personId = Number(personRes.lastInsertRowid);
+
+        let family = null;
+        if (famCode.family_id) {
+          req.db.prepare(`
+            INSERT INTO family_memberships (family_id, person_id)
+            VALUES (?, ?)
+          `).run(famCode.family_id, personId);
+          family = req.db.prepare('SELECT * FROM families WHERE id = ?').get(famCode.family_id);
+        }
+
+        const session = createSession(req.db, userId);
+
+        res.cookie('session_token', session.token, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+          maxAge: 30 * 24 * 60 * 60 * 1000,
+        });
+
+        const user = { id: userId, email, role: 'member', is_active: 1 };
+        const person = { id: personId, display_name: displayName, user_id: userId, is_active: 1 };
+
+        return { user, person, family, token: session.token };
+      });
+
+      res.status(201).json({
+        message: 'Registration successful',
+        token: result.token,
+        user: result.user,
+        person: result.person,
+        family: result.family,
+      });
+      return;
+    } catch (err: any) {
+      res.status(400).json({ error: 'REGISTRATION_FAILED', message: err.message });
+      return;
+    }
+  }
+
+  // 2. Fall back to existing trip-based invitations
   const invite = req.db.prepare(`
     SELECT i.*, t.name as trip_name
     FROM invitations i

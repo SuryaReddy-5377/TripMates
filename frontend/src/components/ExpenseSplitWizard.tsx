@@ -35,7 +35,8 @@ export const ExpenseSplitWizard: React.FC<Props> = ({
   const [title, setTitle] = useState('');
   const [expenseDate, setExpenseDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [category, setCategory] = useState('Food');
-  const [totalRupees, setTotalRupees] = useState('3000');
+  // Starts EMPTY / 0 - users must deliberately enter the expense amount
+  const [totalRupees, setTotalRupees] = useState('');
   const [payerType, setPayerType] = useState<'person' | 'family'>('person');
   const [payerId, setPayerId] = useState<number>(participants[0]?.id || 1);
 
@@ -188,11 +189,15 @@ export const ExpenseSplitWizard: React.FC<Props> = ({
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) {
-      setErrorMsg('Please enter an expense title');
+      setErrorMsg(t.enterValidTitle || 'Please enter an expense title');
+      return;
+    }
+    if (totalPaise <= 0) {
+      setErrorMsg(t.expenseAmountMustBePositive || 'Please enter an expense amount greater than ₹0');
       return;
     }
     if (selectedKeys.length === 0) {
-      setErrorMsg('Please select at least one participant sharing this expense');
+      setErrorMsg(t.selectAtLeastOneParticipant || 'Please select at least one participant sharing this expense');
       return;
     }
     if (splitMethod === 'individual_remainder' && isIndividualTotalOver) {
@@ -284,33 +289,51 @@ export const ExpenseSplitWizard: React.FC<Props> = ({
 
       <form onSubmit={handleSave}>
         {/* Form Inputs Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.25rem' }}>
-          <div className="form-group">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginBottom: '1.25rem' }}>
+          <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">{t.expenseTitle}</label>
             <input
               type="text"
               className="form-input"
               value={title}
               onChange={e => setTitle(e.target.value)}
-              placeholder="e.g. Group Dinner"
+              placeholder="e.g. Manali River Rafting or Lunch"
               required
             />
           </div>
 
-          <div className="form-group">
+          <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">{t.totalAmount} (₹)</label>
-            <input
-              type="number"
-              step="0.01"
-              min="0.01"
-              className="form-input"
-              value={totalRupees}
-              onChange={e => setTotalRupees(e.target.value)}
-              required
-            />
+            <div style={{ position: 'relative' }}>
+              <span style={{
+                position: 'absolute',
+                left: '12px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                fontSize: '1.1rem',
+                fontWeight: 700,
+                color: '#64748b',
+              }}>₹</span>
+              <input
+                type="number"
+                step="0.01"
+                min="0.01"
+                className="form-input"
+                style={{
+                  paddingLeft: '28px',
+                  fontSize: '1.1rem',
+                  fontWeight: 700,
+                  color: '#0f172a',
+                }}
+                placeholder="0.00"
+                value={totalRupees}
+                onChange={e => setTotalRupees(e.target.value)}
+                required
+              />
+            </div>
           </div>
 
-          <div className="form-group">
+          <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">{t.expenseDate}</label>
             <input
               type="date"
@@ -321,8 +344,8 @@ export const ExpenseSplitWizard: React.FC<Props> = ({
             />
           </div>
 
-          <div className="form-group">
-            <label className="form-label">{t.paidBy}</label>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label className="form-label">{t.whoPaid || t.paidBy}</label>
             <select
               className="form-select"
               value={`${payerType}:${payerId}`}
@@ -345,6 +368,33 @@ export const ExpenseSplitWizard: React.FC<Props> = ({
                 </optgroup>
               )}
             </select>
+          </div>
+        </div>
+
+        {/* Category Pills Selection */}
+        <div style={{ marginBottom: '1.25rem' }}>
+          <label className="form-label" style={{ marginBottom: '0.4rem' }}>{t.category}</label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+            {['Food', 'Transport', 'Stay', 'Activities', 'Shopping', 'General'].map(cat => (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setCategory(cat)}
+                style={{
+                  padding: '0.35rem 0.8rem',
+                  borderRadius: '9999px',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  border: category === cat ? '1.5px solid #0f172a' : '1px solid #cbd5e1',
+                  background: category === cat ? '#0f172a' : '#ffffff',
+                  color: category === cat ? '#ffffff' : '#475569',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                {cat}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -424,7 +474,7 @@ export const ExpenseSplitWizard: React.FC<Props> = ({
         <div style={{ marginBottom: '1.5rem', background: '#f8fafc', border: '1px solid #e2e8f0', padding: '1rem', borderRadius: '12px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
             <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#0f172a' }}>
-              Responsible Participants ({selectedKeys.length} of {participants.length} selected)
+              {t.participatingMembers} ({selectedKeys.length} of {participants.length} selected)
             </span>
             <div style={{ display: 'flex', gap: '0.5rem' }}>
               <button

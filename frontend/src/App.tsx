@@ -119,10 +119,6 @@ export const App: React.FC = () => {
     return (
       <AuthScreen
         hasSuperAdmin={hasSuperAdmin}
-        onNavigateToAdmin={() => {
-          setIsAdminLoginMode(true);
-          window.history.pushState({}, '', '/admin/login');
-        }}
         onAuthSuccess={(data) => {
           setUser(data.user);
           setPerson(data.person);

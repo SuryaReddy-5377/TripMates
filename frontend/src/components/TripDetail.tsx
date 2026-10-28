@@ -486,7 +486,12 @@ export const TripDetail: React.FC<Props> = ({
 
       {/* TAB CONTENT: Map */}
       {activeTab === 'map' && (
-        <TripMap destination={trip.destination} tripName={trip.name} />
+        <TripMap
+          tripId={trip.id}
+          destination={trip.destination}
+          tripName={trip.name}
+          canEditRoute={currentUser?.role === 'super_admin' || trip.created_by === currentUser?.id}
+        />
       )}
 
       {/* MODALS */}

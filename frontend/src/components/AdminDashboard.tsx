@@ -30,6 +30,9 @@ import {
   MapPin,
   X,
   Layers,
+  KeyRound,
+  Copy,
+  Check,
 } from 'lucide-react';
 
 interface Props {
@@ -40,7 +43,7 @@ interface Props {
 export const AdminDashboard: React.FC<Props> = ({ onExitAdmin, onSelectTrip }) => {
   const { t, formatINR } = useI18n();
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'families' | 'members' | 'trips' | 'expenses' | 'audit'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'families' | 'members' | 'invite_codes' | 'trips' | 'expenses' | 'audit'>('overview');
   const [loading, setLoading] = useState(false);
 
   // Overview metrics
@@ -59,6 +62,23 @@ export const AdminDashboard: React.FC<Props> = ({ onExitAdmin, onSelectTrip }) =
   const [memberSearch, setMemberSearch] = useState('');
   const [selectedMember, setSelectedMember] = useState<any | null>(null);
   const [confirmStatusModal, setConfirmStatusModal] = useState<{ isOpen: boolean; user?: any; newStatus?: number }>({ isOpen: false });
+
+  // Remove user state
+  const [removeUserModal, setRemoveUserModal] = useState<{ isOpen: boolean; user?: any }>({ isOpen: false });
+  const [removeUserResult, setRemoveUserResult] = useState<string | null>(null);
+  const [removeUserError, setRemoveUserError] = useState<string | null>(null);
+
+  // Invite codes state
+  const [inviteCodes, setInviteCodes] = useState<any[]>([]);
+  const [inviteCodeModal, setInviteCodeModal] = useState(false);
+  const [inviteCodeInput, setInviteCodeInput] = useState('');
+  const [inviteFamilyId, setInviteFamilyId] = useState<string>('');
+  const [inviteMaxUses, setInviteMaxUses] = useState(1);
+  const [inviteExpiresAt, setInviteExpiresAt] = useState('');
+  const [inviteNotes, setInviteNotes] = useState('');
+  const [revokeConfirmCode, setRevokeConfirmCode] = useState<any | null>(null);
+  const [codeCopiedToast, setCodeCopiedToast] = useState<string | null>(null);
+  const [inviteError, setInviteError] = useState<string | null>(null);
 
   // Trips state
   const [trips, setTrips] = useState<any[]>([]);
@@ -186,14 +206,95 @@ export const AdminDashboard: React.FC<Props> = ({ onExitAdmin, onSelectTrip }) =
     }
   };
 
+  // Fetch invite codes
+  const loadInviteCodes = async () => {
+    try {
+      setLoading(true);
+      const res = await api.get('/admin/invite-codes');
+      setInviteCodes(res || []);
+    } catch (err) {
+      console.error('Failed to load invite codes:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (activeTab === 'overview') loadOverview();
     if (activeTab === 'families') loadFamilies();
     if (activeTab === 'members') loadMembers();
+    if (activeTab === 'invite_codes') {
+      loadInviteCodes();
+      loadFamilies();
+    }
     if (activeTab === 'trips') loadTrips();
     if (activeTab === 'expenses') loadExpenses();
     if (activeTab === 'audit') loadAuditLogs();
   }, [activeTab]);
+
+  // Handle Create Invite Code
+  const handleCreateInviteCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setInviteError(null);
+    try {
+      setLoading(true);
+      const payload: any = {
+        max_uses: Number(inviteMaxUses) || 1,
+      };
+      if (inviteCodeInput.trim()) payload.code = inviteCodeInput.trim().toUpperCase();
+      if (inviteFamilyId) payload.family_id = Number(inviteFamilyId);
+      if (inviteExpiresAt) payload.expires_at = inviteExpiresAt;
+      if (inviteNotes.trim()) payload.notes = inviteNotes.trim();
+
+      await api.post('/admin/invite-codes', payload);
+      setInviteCodeModal(false);
+      setInviteCodeInput('');
+      setInviteFamilyId('');
+      setInviteMaxUses(1);
+      setInviteExpiresAt('');
+      setInviteNotes('');
+      loadInviteCodes();
+    } catch (err: any) {
+      setInviteError(err.message || 'Failed to create invite code');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle Revoke Invite Code
+  const handleRevokeInviteCode = async () => {
+    if (!revokeConfirmCode) return;
+    try {
+      setLoading(true);
+      await api.post(`/admin/invite-codes/${revokeConfirmCode.id}/revoke`);
+      setRevokeConfirmCode(null);
+      loadInviteCodes();
+    } catch (err: any) {
+      alert(err.message || 'Failed to revoke invite code');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle Remove / Deactivate User
+  const handleRemoveUser = async () => {
+    if (!removeUserModal.user) return;
+    setRemoveUserError(null);
+    try {
+      setLoading(true);
+      const res = await api.delete(`/admin/members/${removeUserModal.user.user_id}`);
+      setRemoveUserResult(res.message);
+      loadMembers();
+      setTimeout(() => {
+        setRemoveUserModal({ isOpen: false });
+        setRemoveUserResult(null);
+      }, 2500);
+    } catch (err: any) {
+      setRemoveUserError(err.message || 'Failed to remove user');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Family actions
   const handleSaveFamily = async (e: React.FormEvent) => {
@@ -345,6 +446,7 @@ export const AdminDashboard: React.FC<Props> = ({ onExitAdmin, onSelectTrip }) =
           { key: 'overview', label: t.overview, icon: <LayoutDashboard size={16} /> },
           { key: 'families', label: t.familyManagement, icon: <Users size={16} /> },
           { key: 'members', label: t.memberManagement, icon: <UserCheck size={16} /> },
+          { key: 'invite_codes', label: t.familyInviteCodes || 'Invite Codes', icon: <KeyRound size={16} /> },
           { key: 'trips', label: t.tripManagement, icon: <Compass size={16} /> },
           { key: 'expenses', label: t.expenseManagement, icon: <Receipt size={16} /> },
           { key: 'audit', label: t.auditLog, icon: <Shield size={16} /> },
@@ -859,28 +961,51 @@ export const AdminDashboard: React.FC<Props> = ({ onExitAdmin, onSelectTrip }) =
                       </td>
                       <td style={{ padding: '0.85rem 1.15rem', textAlign: 'right' }}>
                         {u.role !== 'super_admin' ? (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setConfirmStatusModal({
-                                isOpen: true,
-                                user: u,
-                                newStatus: u.user_active ? 0 : 1,
-                              })
-                            }
-                            style={{
-                              background: u.user_active ? '#fef2f2' : '#ecfdf5',
-                              border: u.user_active ? '1px solid #fecaca' : '1px solid #a7f3d0',
-                              color: u.user_active ? '#dc2626' : '#059669',
-                              borderRadius: '6px',
-                              padding: '0.35rem 0.65rem',
-                              fontSize: '0.78rem',
-                              fontWeight: 700,
-                              cursor: 'pointer',
-                            }}
-                          >
-                            {u.user_active ? 'Deactivate' : 'Activate'}
-                          </button>
+                          <div style={{ display: 'inline-flex', gap: '0.4rem' }}>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setConfirmStatusModal({
+                                  isOpen: true,
+                                  user: u,
+                                  newStatus: u.user_active ? 0 : 1,
+                                })
+                              }
+                              style={{
+                                background: u.user_active ? '#fef2f2' : '#ecfdf5',
+                                border: u.user_active ? '1px solid #fecaca' : '1px solid #a7f3d0',
+                                color: u.user_active ? '#dc2626' : '#059669',
+                                borderRadius: '6px',
+                                padding: '0.35rem 0.65rem',
+                                fontSize: '0.78rem',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              {u.user_active ? 'Deactivate' : 'Activate'}
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setRemoveUserModal({ isOpen: true, user: u });
+                                setRemoveUserError(null);
+                                setRemoveUserResult(null);
+                              }}
+                              style={{
+                                background: '#ffffff',
+                                border: '1px solid #fecaca',
+                                color: '#dc2626',
+                                borderRadius: '6px',
+                                padding: '0.35rem 0.65rem',
+                                fontSize: '0.78rem',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              {t.removeUser || 'Remove User'}
+                            </button>
+                          </div>
                         ) : (
                           <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Protected</span>
                         )}
@@ -894,7 +1019,200 @@ export const AdminDashboard: React.FC<Props> = ({ onExitAdmin, onSelectTrip }) =
         )}
 
         {/* ==================================================================== */}
-        {/* TAB 4: COMPLETE TRIP MANAGEMENT */}
+        {/* TAB 4: FAMILY INVITE CODES */}
+        {/* ==================================================================== */}
+        {activeTab === 'invite_codes' && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+              <div>
+                <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.5rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
+                  {t.familyInviteCodes || 'Family Invite Codes'}
+                </h2>
+                <p style={{ fontSize: '0.85rem', color: '#64748b', margin: '0.25rem 0 0 0' }}>
+                  Generate and manage registration invite codes. Configure usage limits, target family, or expiration dates.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setInviteCodeModal(true);
+                  setInviteError(null);
+                  setInviteCodeInput('');
+                  setInviteFamilyId('');
+                  setInviteMaxUses(1);
+                  setInviteExpiresAt('');
+                  setInviteNotes('');
+                }}
+                className="btn btn-primary"
+                style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.85rem' }}
+              >
+                <Plus size={16} />
+                <span>{t.createInviteCode || 'Create Invite Code'}</span>
+              </button>
+            </div>
+
+            {/* Copy Notification Toast */}
+            {codeCopiedToast && (
+              <div style={{
+                background: '#ecfdf5',
+                border: '1px solid #a7f3d0',
+                borderRadius: '10px',
+                padding: '0.65rem 1rem',
+                color: '#065f46',
+                fontSize: '0.85rem',
+                marginBottom: '1rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+              }}>
+                <Check size={16} color="#059669" />
+                <span>Code <strong>{codeCopiedToast}</strong> copied to clipboard!</span>
+              </div>
+            )}
+
+            {/* Invite Codes Table */}
+            <div className="card-white" style={{ borderRadius: '16px', overflow: 'hidden' }}>
+              {inviteCodes.length === 0 ? (
+                <div style={{ padding: '3rem 1.5rem', textAlign: 'center', color: '#94a3b8' }}>
+                  <KeyRound size={36} style={{ margin: '0 auto 0.75rem auto', color: '#94a3b8' }} />
+                  <p style={{ margin: 0, fontWeight: 600, fontSize: '0.95rem', color: '#475569' }}>
+                    {t.noInviteCodes || 'No family invite codes created yet.'}
+                  </p>
+                  <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.82rem' }}>
+                    Click "Create Invite Code" to generate your first family registration code.
+                  </p>
+                </div>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.88rem' }}>
+                  <thead style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                    <tr>
+                      <th style={{ padding: '0.85rem 1.15rem' }}>{t.inviteCode || 'Invite Code'}</th>
+                      <th style={{ padding: '0.85rem 1.15rem' }}>{t.targetFamily || 'Target Family'}</th>
+                      <th style={{ padding: '0.85rem 1.15rem' }}>{t.maxUses || 'Usage / Limit'}</th>
+                      <th style={{ padding: '0.85rem 1.15rem' }}>{t.expiresAt || 'Expires'}</th>
+                      <th style={{ padding: '0.85rem 1.15rem' }}>{t.codeStatus || 'Status'}</th>
+                      <th style={{ padding: '0.85rem 1.15rem' }}>{t.notes || 'Notes'}</th>
+                      <th style={{ padding: '0.85rem 1.15rem', textAlign: 'right' }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {inviteCodes.map(c => {
+                      const isExpired = c.expires_at && new Date(c.expires_at) < new Date();
+                      const statusColor = c.status === 'active' && !isExpired
+                        ? '#059669'
+                        : c.status === 'revoked'
+                        ? '#dc2626'
+                        : '#d97706';
+
+                      return (
+                        <tr key={c.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                          <td style={{ padding: '0.85rem 1.15rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <span style={{
+                                fontFamily: 'monospace',
+                                fontWeight: 700,
+                                fontSize: '0.95rem',
+                                color: '#0f172a',
+                                background: '#f1f5f9',
+                                padding: '0.2rem 0.5rem',
+                                borderRadius: '6px',
+                                border: '1px solid #e2e8f0',
+                                letterSpacing: '0.05em',
+                              }}>
+                                {c.code}
+                              </span>
+                              <button
+                                type="button"
+                                title="Copy code to clipboard"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(c.code);
+                                  setCodeCopiedToast(c.code);
+                                  setTimeout(() => setCodeCopiedToast(null), 3000);
+                                }}
+                                style={{
+                                  background: 'none',
+                                  border: 'none',
+                                  color: '#64748b',
+                                  cursor: 'pointer',
+                                  padding: '2px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                }}
+                              >
+                                <Copy size={14} />
+                              </button>
+                            </div>
+                          </td>
+                          <td style={{ padding: '0.85rem 1.15rem', color: '#475569' }}>
+                            {c.family_name ? (
+                              <span style={{ fontWeight: 600, color: '#0f172a' }}>{c.family_name}</span>
+                            ) : (
+                              <span style={{ color: '#0284c7', fontSize: '0.82rem', fontWeight: 600 }}>
+                                {t.allowCreateFamily || 'Allows New Family'}
+                              </span>
+                            )}
+                          </td>
+                          <td style={{ padding: '0.85rem 1.15rem' }}>
+                            <span style={{ fontWeight: 700, color: '#0f172a' }}>{c.uses_count}</span>
+                            <span style={{ color: '#64748b' }}> / {c.max_uses}</span>
+                            <span style={{ fontSize: '0.74rem', color: '#64748b', marginLeft: '0.35rem' }}>
+                              ({c.remaining_uses} left)
+                            </span>
+                          </td>
+                          <td style={{ padding: '0.85rem 1.15rem', color: '#64748b', fontSize: '0.82rem' }}>
+                            {c.expires_at ? new Date(c.expires_at).toLocaleDateString() : 'Never'}
+                          </td>
+                          <td style={{ padding: '0.85rem 1.15rem' }}>
+                            <span
+                              style={{
+                                background: c.status === 'active' && !isExpired ? '#ecfdf5' : c.status === 'revoked' ? '#fef2f2' : '#fffbeb',
+                                color: statusColor,
+                                padding: '0.2rem 0.55rem',
+                                borderRadius: '6px',
+                                fontSize: '0.75rem',
+                                fontWeight: 700,
+                                textTransform: 'uppercase',
+                              }}
+                            >
+                              {isExpired ? 'Expired' : c.status}
+                            </span>
+                          </td>
+                          <td style={{ padding: '0.85rem 1.15rem', color: '#64748b', fontSize: '0.82rem', maxWidth: '200px' }}>
+                            {c.notes || '—'}
+                          </td>
+                          <td style={{ padding: '0.85rem 1.15rem', textAlign: 'right' }}>
+                            {c.status === 'active' && (
+                              <button
+                                type="button"
+                                onClick={() => setRevokeConfirmCode(c)}
+                                style={{
+                                  background: '#ffffff',
+                                  border: '1px solid #fecaca',
+                                  color: '#dc2626',
+                                  borderRadius: '6px',
+                                  padding: '0.3rem 0.65rem',
+                                  fontSize: '0.78rem',
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                {t.revokeCode || 'Revoke'}
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ==================================================================== */}
+        {/* TAB 5: COMPLETE TRIP MANAGEMENT */}
         {/* ==================================================================== */}
         {activeTab === 'trips' && (
           <div>
@@ -1675,6 +1993,379 @@ export const AdminDashboard: React.FC<Props> = ({ onExitAdmin, onSelectTrip }) =
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Remove / Deactivate User Modal */}
+      {removeUserModal.isOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.5)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2000,
+            padding: '1rem',
+          }}
+        >
+          <div style={{ background: '#ffffff', borderRadius: '20px', maxWidth: '480px', width: '100%', padding: '1.75rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginBottom: '1rem' }}>
+              <AlertTriangle size={24} color="#dc2626" />
+              <h3 style={{ fontSize: '1.2rem', fontWeight: 700, margin: 0, color: '#0f172a' }}>
+                {t.removeUserDialogTitle || 'Remove or Deactivate User'}
+              </h3>
+            </div>
+
+            {removeUserResult && (
+              <div style={{
+                background: '#ecfdf5',
+                border: '1px solid #a7f3d0',
+                borderRadius: '10px',
+                padding: '0.75rem 1rem',
+                color: '#065f46',
+                fontSize: '0.85rem',
+                marginBottom: '1rem',
+              }}>
+                {removeUserResult}
+              </div>
+            )}
+
+            {removeUserError && (
+              <div style={{
+                background: '#fef2f2',
+                border: '1px solid #fecaca',
+                borderRadius: '10px',
+                padding: '0.75rem 1rem',
+                color: '#dc2626',
+                fontSize: '0.85rem',
+                marginBottom: '1rem',
+              }}>
+                {removeUserError}
+              </div>
+            )}
+
+            <div style={{
+              background: '#f8fafc',
+              border: '1px solid #e2e8f0',
+              borderRadius: '12px',
+              padding: '0.85rem 1rem',
+              marginBottom: '1.25rem',
+              fontSize: '0.84rem',
+              color: '#334155',
+              lineHeight: 1.5,
+            }}>
+              <p style={{ margin: '0 0 0.5rem 0', fontWeight: 600, color: '#0f172a' }}>
+                User: {removeUserModal.user?.display_name} ({removeUserModal.user?.email})
+              </p>
+              <p style={{ margin: 0, fontSize: '0.8rem', color: '#64748b' }}>
+                {t.removeUserExplanation || 'To protect the integrity of financial ledgers and expense settlements, users with existing financial records (paid expenses, debt allocations, repayments) cannot be permanently purged from the database. Instead, their account will be deactivated and active sessions revoked. Users with zero financial history can be permanently deleted.'}
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.65rem' }}>
+              <button
+                type="button"
+                onClick={() => setRemoveUserModal({ isOpen: false })}
+                style={{
+                  background: '#f1f5f9',
+                  border: 'none',
+                  borderRadius: '10px',
+                  padding: '0.6rem 1.1rem',
+                  fontWeight: 600,
+                  fontSize: '0.88rem',
+                  cursor: 'pointer',
+                }}
+              >
+                {t.cancel}
+              </button>
+              <button
+                type="button"
+                onClick={handleRemoveUser}
+                disabled={Boolean(removeUserResult)}
+                style={{
+                  background: '#dc2626',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '10px',
+                  padding: '0.6rem 1.25rem',
+                  fontWeight: 700,
+                  fontSize: '0.88rem',
+                  cursor: 'pointer',
+                }}
+              >
+                {t.confirmRemoveUser || 'Confirm Action'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Family Invite Code Modal */}
+      {inviteCodeModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.5)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2000,
+            padding: '1rem',
+          }}
+        >
+          <div style={{ background: '#ffffff', borderRadius: '20px', maxWidth: '460px', width: '100%', padding: '1.75rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginBottom: '1.25rem' }}>
+              <KeyRound size={22} color="#0f172a" />
+              <h3 style={{ fontSize: '1.2rem', fontWeight: 700, margin: 0, color: '#0f172a' }}>
+                {t.createInviteCode || 'Create Family Invite Code'}
+              </h3>
+            </div>
+
+            {inviteError && (
+              <div style={{
+                background: '#fef2f2',
+                border: '1px solid #fecaca',
+                borderRadius: '10px',
+                padding: '0.65rem 0.9rem',
+                color: '#dc2626',
+                fontSize: '0.84rem',
+                marginBottom: '1rem',
+              }}>
+                {inviteError}
+              </div>
+            )}
+
+            <form onSubmit={handleCreateInviteCode} style={{ display: 'grid', gap: '1rem' }}>
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                  <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>
+                    {t.inviteCode || 'Invite Code'}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const rand = 'FAM-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+                      setInviteCodeInput(rand);
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#2563eb',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      padding: 0,
+                    }}
+                  >
+                    {t.generateRandomCode || 'Generate Random'}
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  placeholder="e.g. FAM-SUMMER26 (Leave blank to auto-generate)"
+                  value={inviteCodeInput}
+                  onChange={e => setInviteCodeInput(e.target.value.toUpperCase())}
+                  style={{
+                    width: '100%',
+                    padding: '0.65rem 1rem',
+                    borderRadius: '10px',
+                    border: '1.5px solid #e2e8f0',
+                    fontSize: '0.92rem',
+                    outline: 'none',
+                    textTransform: 'uppercase',
+                    fontFamily: 'monospace',
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: '0.35rem' }}>
+                  {t.targetFamily || 'Target Family'}
+                </label>
+                <select
+                  value={inviteFamilyId}
+                  onChange={e => setInviteFamilyId(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '0.65rem 1rem',
+                    borderRadius: '10px',
+                    border: '1.5px solid #e2e8f0',
+                    fontSize: '0.92rem',
+                    outline: 'none',
+                    background: '#ffffff',
+                  }}
+                >
+                  <option value="">{t.allowCreateFamily || '— Allows New Family Creation (Unassigned) —'}</option>
+                  {families.map(f => (
+                    <option key={f.id} value={f.id}>{f.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: '0.35rem' }}>
+                    {t.maxUses || 'Max Uses'}
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="1000"
+                    required
+                    value={inviteMaxUses}
+                    onChange={e => setInviteMaxUses(parseInt(e.target.value) || 1)}
+                    style={{
+                      width: '100%',
+                      padding: '0.65rem 1rem',
+                      borderRadius: '10px',
+                      border: '1.5px solid #e2e8f0',
+                      fontSize: '0.92rem',
+                      outline: 'none',
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: '0.35rem' }}>
+                    {t.expiresAt || 'Expiry Date (Optional)'}
+                  </label>
+                  <input
+                    type="date"
+                    value={inviteExpiresAt}
+                    onChange={e => setInviteExpiresAt(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '0.65rem 1rem',
+                      borderRadius: '10px',
+                      border: '1.5px solid #e2e8f0',
+                      fontSize: '0.92rem',
+                      outline: 'none',
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: '0.35rem' }}>
+                  {t.notes || 'Notes / Purpose'}
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. For Bangalore cousins"
+                  value={inviteNotes}
+                  onChange={e => setInviteNotes(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '0.65rem 1rem',
+                    borderRadius: '10px',
+                    border: '1.5px solid #e2e8f0',
+                    fontSize: '0.92rem',
+                    outline: 'none',
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.65rem', marginTop: '0.5rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setInviteCodeModal(false)}
+                  style={{
+                    background: '#f1f5f9',
+                    border: 'none',
+                    borderRadius: '10px',
+                    padding: '0.6rem 1.1rem',
+                    fontWeight: 600,
+                    fontSize: '0.88rem',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {t.cancel}
+                </button>
+                <button
+                  type="submit"
+                  style={{
+                    background: '#0f172a',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '10px',
+                    padding: '0.6rem 1.25rem',
+                    fontWeight: 700,
+                    fontSize: '0.88rem',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {t.createInviteCode || 'Create Code'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Revoke Family Invite Code Confirmation Modal */}
+      {revokeConfirmCode && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.5)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2000,
+            padding: '1rem',
+          }}
+        >
+          <div style={{ background: '#ffffff', borderRadius: '20px', maxWidth: '440px', width: '100%', padding: '1.75rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginBottom: '1rem' }}>
+              <AlertTriangle size={24} color="#dc2626" />
+              <h3 style={{ fontSize: '1.2rem', fontWeight: 700, margin: 0, color: '#0f172a' }}>
+                {t.revokeCode || 'Revoke Family Invite Code?'}
+              </h3>
+            </div>
+            <p style={{ fontSize: '0.88rem', color: '#64748b', lineHeight: 1.5, margin: '0 0 1.5rem 0' }}>
+              Are you sure you want to revoke invite code <strong>"{revokeConfirmCode.code}"</strong>? New users will no longer be able to use this code to register.
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.65rem' }}>
+              <button
+                type="button"
+                onClick={() => setRevokeConfirmCode(null)}
+                style={{
+                  background: '#f1f5f9',
+                  border: 'none',
+                  borderRadius: '10px',
+                  padding: '0.6rem 1.1rem',
+                  fontWeight: 600,
+                  fontSize: '0.88rem',
+                  cursor: 'pointer',
+                }}
+              >
+                {t.cancel}
+              </button>
+              <button
+                type="button"
+                onClick={handleRevokeInviteCode}
+                style={{
+                  background: '#dc2626',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '10px',
+                  padding: '0.6rem 1.25rem',
+                  fontWeight: 700,
+                  fontSize: '0.88rem',
+                  cursor: 'pointer',
+                }}
+              >
+                {t.revokeCode || 'Confirm Revoke'}
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import crypto from 'node:crypto';
 import { z } from 'zod';
 import { verifyPassword } from '../auth/password';
 import { createSession, revokeAllUserSessions } from '../auth/session';
@@ -444,6 +445,104 @@ adminRouter.patch('/members/:userId/status', (req: Request, res: Response) => {
   });
 });
 
+// Remove or deactivate user account safely without damaging financial history
+adminRouter.delete('/members/:userId', (req: Request, res: Response) => {
+  const targetUserId = Number(req.params.userId);
+
+  if (!targetUserId || isNaN(targetUserId)) {
+    res.status(400).json({ error: 'BAD_REQUEST', message: 'Valid user ID required' });
+    return;
+  }
+
+  // Prevent super admin from deleting themselves
+  if (targetUserId === req.user!.id) {
+    res.status(400).json({ error: 'SELF_REMOVAL_PREVENTED', message: 'You cannot remove your own administrative account.' });
+    return;
+  }
+
+  const targetUser = req.db.prepare('SELECT id, email, role, is_active FROM users WHERE id = ?').get(targetUserId) as any;
+  if (!targetUser) {
+    res.status(404).json({ error: 'NOT_FOUND', message: 'User not found' });
+    return;
+  }
+
+  // Prevent removing the last remaining active super admin
+  if (targetUser.role === 'super_admin') {
+    const adminCount = (req.db.prepare(`SELECT count(*) as count FROM users WHERE role = 'super_admin' AND is_active = 1`).get() as { count: number }).count;
+    if (adminCount <= 1) {
+      res.status(400).json({ error: 'LAST_ADMIN_PREVENTED', message: 'Cannot remove the last remaining active Super Administrator.' });
+      return;
+    }
+  }
+
+  // Get associated person ID
+  const person = req.db.prepare('SELECT id, display_name FROM persons WHERE user_id = ?').get(targetUserId) as { id: number; display_name: string } | undefined;
+  const personId = person ? person.id : null;
+
+  // Check for existing financial records or trip records
+  let hasFinancialRecords = false;
+  if (personId) {
+    const expensePayerCount = (req.db.prepare(`SELECT count(*) as count FROM expenses WHERE paid_by_type = 'person' AND paid_by_id = ?`).get(personId) as { count: number }).count;
+    const allocationCount = (req.db.prepare(`SELECT count(*) as count FROM expense_allocations WHERE account_type = 'person' AND account_id = ?`).get(personId) as { count: number }).count;
+    const repaymentCount = (req.db.prepare(`SELECT count(*) as count FROM repayments WHERE (from_type = 'person' AND from_id = ?) OR (to_type = 'person' AND to_id = ?)`).get(personId, personId) as { count: number }).count;
+    const creatorExpenseCount = (req.db.prepare(`SELECT count(*) as count FROM expenses WHERE created_by = ?`).get(targetUserId) as { count: number }).count;
+    const creatorTripCount = (req.db.prepare(`SELECT count(*) as count FROM trips WHERE created_by = ?`).get(targetUserId) as { count: number }).count;
+
+    if (expensePayerCount > 0 || allocationCount > 0 || repaymentCount > 0 || creatorExpenseCount > 0 || creatorTripCount > 0) {
+      hasFinancialRecords = true;
+    }
+  }
+
+  if (hasFinancialRecords) {
+    // Financial records exist: deactivate account, revoke active sessions and family memberships to preserve historical integrity
+    withTransaction(req.db, () => {
+      req.db.prepare('UPDATE users SET is_active = 0 WHERE id = ?').run(targetUserId);
+      if (personId) {
+        req.db.prepare(`UPDATE family_memberships SET left_at = datetime('now') WHERE person_id = ? AND left_at IS NULL`).run(personId);
+      }
+      revokeAllUserSessions(req.db, targetUserId);
+
+      recordAuditLog(req.db, req.user!.id, 'ADMIN_DEACTIVATE_USER_PRESERVE_FINANCIALS', 'users', targetUserId, {
+        email: targetUser.email,
+        is_active: targetUser.is_active,
+      }, {
+        is_active: 0,
+        reason: 'User has financial history; preserved financial records and deactivated account.',
+      });
+    });
+
+    res.json({
+      action: 'deactivated',
+      message: 'User account has existing financial history. Account has been deactivated and active sessions revoked to preserve historical financial integrity.',
+      userId: targetUserId,
+    });
+    return;
+  }
+
+  // Zero financial records: safe to permanently delete user and related non-financial references
+  withTransaction(req.db, () => {
+    if (personId) {
+      req.db.prepare('DELETE FROM family_memberships WHERE person_id = ?').run(personId);
+      req.db.prepare('DELETE FROM trip_participants WHERE person_id = ?').run(personId);
+      req.db.prepare('DELETE FROM persons WHERE id = ?').run(personId);
+    }
+    req.db.prepare('DELETE FROM notifications WHERE user_id = ?').run(targetUserId);
+    req.db.prepare('DELETE FROM notification_preferences WHERE user_id = ?').run(targetUserId);
+    req.db.prepare('DELETE FROM sessions WHERE user_id = ?').run(targetUserId);
+    req.db.prepare('DELETE FROM users WHERE id = ?').run(targetUserId);
+
+    recordAuditLog(req.db, req.user!.id, 'ADMIN_PERMANENT_DELETE_USER', 'users', targetUserId, {
+      email: targetUser.email,
+    }, null);
+  });
+
+  res.json({
+    action: 'deleted',
+    message: 'User had zero financial records and was permanently removed.',
+    userId: targetUserId,
+  });
+});
+
 // ----------------------------------------------------------------------------
 // D. COMPLETE TRIP MANAGEMENT (FEATURE 6.D)
 // ----------------------------------------------------------------------------
@@ -714,4 +813,106 @@ adminRouter.get('/audit', (req: Request, res: Response) => {
       after: l.after_json ? JSON.parse(l.after_json) : null,
     })),
   });
+});
+
+// ----------------------------------------------------------------------------
+// G. FAMILY INVITE CODES MANAGEMENT
+// ----------------------------------------------------------------------------
+adminRouter.get('/invite-codes', (req: Request, res: Response) => {
+  const codes = req.db.prepare(`
+    SELECT fic.id, fic.code, fic.family_id, fic.max_uses, fic.uses_count,
+           (fic.max_uses - fic.uses_count) as remaining_uses,
+           fic.expires_at, fic.status, fic.created_at, fic.notes,
+           f.name as family_name,
+           u.email as creator_email
+    FROM family_invite_codes fic
+    LEFT JOIN families f ON fic.family_id = f.id
+    LEFT JOIN users u ON fic.created_by = u.id
+    ORDER BY fic.created_at DESC
+  `).all();
+
+  res.json(codes);
+});
+
+const createInviteCodeSchema = z.object({
+  code: z.string().trim().min(4).max(32).optional(),
+  family_id: z.number().int().positive().nullable().optional(),
+  max_uses: z.number().int().positive().optional().default(1),
+  expires_at: z.string().nullable().optional(),
+  notes: z.string().trim().max(255).optional(),
+});
+
+adminRouter.post('/invite-codes', (req: Request, res: Response) => {
+  const parseResult = createInviteCodeSchema.safeParse(req.body);
+  if (!parseResult.success) {
+    res.status(400).json({ error: 'VALIDATION_ERROR', details: parseResult.error.format() });
+    return;
+  }
+
+  const data = parseResult.data;
+  let code = data.code ? data.code.toUpperCase() : '';
+
+  if (!code) {
+    // Generate secure random uppercase alphanumeric invite code
+    code = 'FAM-' + crypto.randomBytes(4).toString('hex').toUpperCase();
+  }
+
+  // Check code uniqueness
+  const existing = req.db.prepare('SELECT id FROM family_invite_codes WHERE code = ? COLLATE NOCASE').get(code);
+  if (existing) {
+    res.status(400).json({ error: 'CODE_EXISTS', message: 'An invite code with this text already exists. Please choose a unique code.' });
+    return;
+  }
+
+  // If family_id provided, verify family exists
+  if (data.family_id) {
+    const fam = req.db.prepare('SELECT id, name FROM families WHERE id = ?').get(data.family_id);
+    if (!fam) {
+      res.status(404).json({ error: 'FAMILY_NOT_FOUND', message: 'Target family does not exist.' });
+      return;
+    }
+  }
+
+  const insertRes = req.db.prepare(`
+    INSERT INTO family_invite_codes (code, family_id, max_uses, uses_count, expires_at, status, created_by, notes)
+    VALUES (?, ?, ?, 0, ?, 'active', ?, ?)
+  `).run(code, data.family_id || null, data.max_uses, data.expires_at || null, req.user!.id, data.notes || null);
+
+  const newId = Number(insertRes.lastInsertRowid);
+
+  recordAuditLog(req.db, req.user!.id, 'ADMIN_CREATE_FAMILY_INVITE_CODE', 'family_invite_codes', newId, null, {
+    code,
+    family_id: data.family_id,
+    max_uses: data.max_uses,
+    expires_at: data.expires_at,
+  });
+
+  const created = req.db.prepare(`
+    SELECT fic.*, f.name as family_name
+    FROM family_invite_codes fic
+    LEFT JOIN families f ON fic.family_id = f.id
+    WHERE fic.id = ?
+  `).get(newId);
+
+  res.status(201).json(created);
+});
+
+adminRouter.post('/invite-codes/:id/revoke', (req: Request, res: Response) => {
+  const codeId = Number(req.params.id);
+  const codeRow = req.db.prepare('SELECT * FROM family_invite_codes WHERE id = ?').get(codeId) as any;
+
+  if (!codeRow) {
+    res.status(404).json({ error: 'NOT_FOUND', message: 'Invite code not found' });
+    return;
+  }
+
+  req.db.prepare(`UPDATE family_invite_codes SET status = 'revoked' WHERE id = ?`).run(codeId);
+
+  recordAuditLog(req.db, req.user!.id, 'ADMIN_REVOKE_FAMILY_INVITE_CODE', 'family_invite_codes', codeId, {
+    status: codeRow.status,
+  }, {
+    status: 'revoked',
+  });
+
+  res.json({ message: 'Invite code revoked successfully', id: codeId, status: 'revoked' });
 });
