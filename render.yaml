@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: tripmates-backend
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DATABASE_PATH
+        value: data/tripmates.db
+      - key: SESSION_SECRET
+        generateValue: true
+
