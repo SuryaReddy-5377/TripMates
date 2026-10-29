@@ -48,9 +48,9 @@ const expenseInputSchema = z.object({
   title: z.string().min(1),
   expense_date: z.string().min(1),
   category: z.string().min(1),
-  paid_by_type: z.enum(['person', 'family']),
-  paid_by_id: z.number().int().positive(),
-  accounting_mode: z.enum(['individual', 'family', 'mixed']),
+  paid_by_type: z.enum(['person', 'family']).default('person'),
+  paid_by_id: z.number().int().positive().default(1),
+  accounting_mode: z.enum(['individual', 'family', 'mixed']).default('individual'),
   split_method: z.enum(['equal', 'per_head', 'family_wise', 'individual', 'individual_remainder', 'itemized', 'custom', 'percentage']),
   total_paise: z.number().int().positive().optional(),
   total_rupees: z.union([z.string(), z.number()]).optional(),
@@ -107,6 +107,15 @@ const expenseInputSchema = z.object({
 
   // Optional manual family share breakdown
   family_breakdowns: z.record(z.string(), z.array(z.object({ id: z.string(), amount: z.number().int().nonnegative() }))).optional(),
+});
+
+const expensePreviewSchema = expenseInputSchema.extend({
+  title: z.string().min(1).default('Preview'),
+  expense_date: z.string().min(1).default(() => new Date().toISOString().split('T')[0]),
+  category: z.string().min(1).default('general'),
+  paid_by_type: z.enum(['person', 'family']).default('person'),
+  paid_by_id: z.number().int().positive().default(1),
+  accounting_mode: z.enum(['individual', 'family', 'mixed']).default('individual'),
 });
 
 function calculateSplitResult(input: z.infer<typeof expenseInputSchema>) {
@@ -230,7 +239,7 @@ function calculateSplitResult(input: z.infer<typeof expenseInputSchema>) {
 
 // POST /api/trips/:tripId/expenses/preview - Preview split calculation without saving
 expensesRouter.post('/preview', requireAuth, requireTripAccess('tripId'), (req: Request, res: Response) => {
-  const parseResult = expenseInputSchema.safeParse(req.body);
+  const parseResult = expensePreviewSchema.safeParse(req.body);
   if (!parseResult.success) {
     res.status(400).json({ error: 'VALIDATION_ERROR', details: parseResult.error.format() });
     return;
@@ -352,6 +361,9 @@ expensesRouter.post('/', requireAuth, requireTripAccess('tripId'), (req: Request
   }
 
   const input = parseResult.data;
+  if (input.split_method === 'family_wise' && input.accounting_mode === 'individual') {
+    input.accounting_mode = 'family';
+  }
 
   try {
     const calc = calculateSplitResult(input);

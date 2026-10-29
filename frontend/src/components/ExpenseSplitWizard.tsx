@@ -125,7 +125,26 @@ export const ExpenseSplitWizard: React.FC<Props> = ({
           return;
         }
 
+        const hasFamilies = selectedKeys.some(k => k.startsWith('f:'));
+        const hasPersons = selectedKeys.some(k => k.startsWith('p:'));
+        const accountingMode = splitMethod === 'family_wise'
+          ? 'family'
+          : (hasFamilies && hasPersons)
+            ? 'mixed'
+            : hasFamilies
+              ? 'family'
+              : 'individual';
+
+        const safePayerId = Number(payerId) > 0 ? Number(payerId) : (participants[0]?.id || 1);
+        const safePayerType = payerType || 'person';
+
         const payload: any = {
+          title: title.trim() || 'Expense',
+          expense_date: expenseDate || new Date().toISOString().split('T')[0],
+          category: category || 'general',
+          paid_by_type: safePayerType,
+          paid_by_id: safePayerId,
+          accounting_mode: accountingMode,
           split_method: splitMethod,
           total_paise: totalPaise,
         };
@@ -208,13 +227,27 @@ export const ExpenseSplitWizard: React.FC<Props> = ({
       setIsSubmitting(true);
       setErrorMsg(null);
 
+      const hasFamilies = selectedKeys.some(k => k.startsWith('f:'));
+      const hasPersons = selectedKeys.some(k => k.startsWith('p:'));
+      const accountingMode = splitMethod === 'family_wise'
+        ? 'family'
+        : (hasFamilies && hasPersons)
+          ? 'mixed'
+          : hasFamilies
+            ? 'family'
+            : 'individual';
+
+      const safePayerId = Number(payerId) > 0 ? Number(payerId) : (participants[0]?.id || 1);
+      const safePayerType = payerType || 'person';
+
       const payload: any = {
         title: title.trim(),
         expense_date: expenseDate,
         category,
         total_paise: totalPaise,
-        paid_by_type: payerType,
-        paid_by_id: payerId,
+        paid_by_type: safePayerType,
+        paid_by_id: safePayerId,
+        accounting_mode: accountingMode,
         split_method: splitMethod,
       };
 

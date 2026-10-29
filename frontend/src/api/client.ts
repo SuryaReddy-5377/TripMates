@@ -30,7 +30,26 @@ export async function request<T = any>(endpoint: string, options: RequestInit = 
   const data = isJson ? await response.json() : await response.text();
 
   if (!response.ok) {
-    const errorMsg = data && typeof data === 'object' && data.message ? data.message : `HTTP ${response.status}`;
+    let errorMsg = `HTTP ${response.status}`;
+    if (data && typeof data === 'object') {
+      if (data.message) {
+        errorMsg = data.message;
+      } else if (data.error) {
+        if (data.details && typeof data.details === 'object') {
+          const fieldMsgs: string[] = [];
+          for (const [k, v] of Object.entries(data.details)) {
+            if (k === '_errors') continue;
+            const errList = (v as any)?._errors;
+            if (Array.isArray(errList) && errList.length > 0) {
+              fieldMsgs.push(`${k}: ${errList.join(', ')}`);
+            }
+          }
+          errorMsg = fieldMsgs.length > 0 ? `${data.error}: ${fieldMsgs.join('; ')}` : data.error;
+        } else {
+          errorMsg = data.error;
+        }
+      }
+    }
     const err = new Error(errorMsg);
     (err as any).status = response.status;
     (err as any).data = data;
