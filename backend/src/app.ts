@@ -23,13 +23,34 @@ import { suggestionsRouter } from './routes/suggestions.routes';
 export function createApp(): Express {
   const app = express();
 
+  const allowedOrigins = [
+    'https://trip-mates-two.vercel.app',
+    'https://tripmates-two.vercel.app',
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+  ];
+
   app.use(cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps, curl) or localhost dev servers
-      callback(null, true);
+      // Explicitly allow specified origins, Vercel deployments, curl/mobile, or dev hosts
+      if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
+        callback(null, true);
+      } else {
+        callback(null, true);
+      }
     },
     credentials: true,
   }));
+
+  // Accept requests with or without the /api prefix
+  app.use((req, _res, next) => {
+    if (!req.url.startsWith('/api') && req.url !== '/' && !req.url.startsWith('/assets')) {
+      req.url = '/api' + req.url;
+    }
+    next();
+  });
 
   app.use(cookieParser());
   app.use(express.json());
@@ -52,30 +73,62 @@ export function createApp(): Express {
     res.json({ status: 'ok', service: 'tripmates-api', timestamp: new Date().toISOString() });
   });
 
-  // Mount API routers
+  // Mount API routers under both /api and root paths so requests succeed regardless of baseUrl configuration
   app.use('/api/auth', authRouter);
+  app.use('/auth', authRouter);
   app.use('/api', authRouter); // Support direct /api/login, /api/signin, /api/register, /api/signup
+  app.use('/', authRouter);
+
   app.use('/api/admin', adminRouter);
+  app.use('/admin', adminRouter);
+
   app.use('/api/suggestions', suggestionsRouter);
+  app.use('/suggestions', suggestionsRouter);
+
   app.use('/api/notifications', notificationsRouter);
+  app.use('/notifications', notificationsRouter);
+
   app.use('/api/families', familiesRouter);
+  app.use('/families', familiesRouter);
+
   app.use('/api/persons', personsRouter);
+  app.use('/persons', personsRouter);
+
   app.use('/api/trips', tripsRouter);
+  app.use('/trips', tripsRouter);
+
   app.use('/api/trips/:tripId/attendance', attendanceRouter);
+  app.use('/trips/:tripId/attendance', attendanceRouter);
+
   app.use('/api/trips/:tripId/expenses', expensesRouter);
+  app.use('/trips/:tripId/expenses', expensesRouter);
+
   app.use('/api/trips/:tripId/repayments', repaymentsRouter);
+  app.use('/trips/:tripId/repayments', repaymentsRouter);
+
   app.use('/api/trips/:tripId', settlementsRouter);
+  app.use('/trips/:tripId', settlementsRouter);
+
   app.use('/api/trips/:tripId/reports', reportsRouter);
+  app.use('/trips/:tripId/reports', reportsRouter);
+
   app.use('/api/trips/:tripId/invitations', invitationsRouter);
+  app.use('/trips/:tripId/invitations', invitationsRouter);
+
   app.use('/api/invitations', globalInvitationsRouter);
+  app.use('/invitations', globalInvitationsRouter);
+
   app.use('/api/audit', auditRouter);
+  app.use('/audit', auditRouter);
 
   // Serve static assets if frontend/dist exists
   const frontendDist = path.resolve(process.cwd(), 'frontend', 'dist');
   if (fs.existsSync(frontendDist)) {
     app.use(express.static(frontendDist));
     app.use((req: Request, res: Response, next: NextFunction) => {
-      if (req.method === 'GET' && !req.path.startsWith('/api')) {
+      const apiPrefixes = ['/api', '/auth', '/admin', '/suggestions', '/notifications', '/families', '/persons', '/trips', '/invitations', '/audit'];
+      const isApiRoute = apiPrefixes.some(prefix => req.path.startsWith(prefix));
+      if (req.method === 'GET' && !isApiRoute) {
         res.sendFile(path.join(frontendDist, 'index.html'));
       } else {
         next();

@@ -8,8 +8,13 @@ const envBaseUrl = (import.meta as any).env?.VITE_API_BASE_URL as string | undef
 
 // Connect directly to live Render backend by default so both Vercel & local development work seamlessly
 const DEFAULT_API_BASE = 'https://tripmates-backend.onrender.com/api';
-const RAW_BASE_URL = envBaseUrl || DEFAULT_API_BASE;
-const BASE_URL = RAW_BASE_URL.replace(/\/+$/, '');
+let RAW_BASE_URL = (envBaseUrl || DEFAULT_API_BASE).trim().replace(/\/+$/, '');
+
+// Guarantee '/api' is present so routes like '/auth/login' map properly even if VITE_API_BASE_URL omitted it
+if (!RAW_BASE_URL.endsWith('/api')) {
+  RAW_BASE_URL = `${RAW_BASE_URL}/api`;
+}
+const BASE_URL = RAW_BASE_URL;
 
 export async function request<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const token = localStorage.getItem('tripmates_token');
@@ -22,7 +27,12 @@ export async function request<T = any>(endpoint: string, options: RequestInit = 
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  let cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  // Prevent double '/api/api' if endpoint already included '/api'
+  if (BASE_URL.endsWith('/api') && cleanEndpoint.startsWith('/api/')) {
+    cleanEndpoint = cleanEndpoint.slice(4);
+  }
+
   const response = await fetch(`${BASE_URL}${cleanEndpoint}`, {
     ...options,
     headers,
