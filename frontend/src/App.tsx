@@ -9,6 +9,8 @@ import { AuthScreen } from './components/AuthScreen';
 import { AdminLogin } from './components/AdminLogin';
 import { AdminDashboard } from './components/AdminDashboard';
 import { ProfileModal } from './components/ProfileModal';
+import { Footer } from './components/Footer';
+import { SuggestionModal } from './components/SuggestionModal';
 
 export const App: React.FC = () => {
   const { t } = useI18n();
@@ -19,6 +21,7 @@ export const App: React.FC = () => {
   const [person, setPerson] = useState<any>(null);
   const [family, setFamily] = useState<any>(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showSuggestionModal, setShowSuggestionModal] = useState(false);
 
   // Path & Navigation state
   const [isAdminLoginMode, setIsAdminLoginMode] = useState<boolean>(
@@ -176,6 +179,7 @@ export const App: React.FC = () => {
         onSelectTrip={(id) => setSelectedTripId(id)}
         onLogout={handleLogout}
         onOpenProfile={() => setShowProfileModal(true)}
+        onOpenSuggestion={() => setShowSuggestionModal(true)}
       />
 
       <main style={{ flex: 1 }}>
@@ -199,10 +203,20 @@ export const App: React.FC = () => {
         )}
       </main>
 
+      <Footer onOpenSuggestion={() => setShowSuggestionModal(true)} isLoggedIn={!!user} />
+
       {showProfileModal && (
         <ProfileModal
           onClose={() => setShowProfileModal(false)}
           onProfileUpdated={checkAuthStatus}
+        />
+      )}
+
+      {showSuggestionModal && (
+        <SuggestionModal
+          user={user}
+          person={person}
+          onClose={() => setShowSuggestionModal(false)}
         />
       )}
     </div>

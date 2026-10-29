@@ -916,3 +916,71 @@ adminRouter.post('/invite-codes/:id/revoke', (req: Request, res: Response) => {
 
   res.json({ message: 'Invite code revoked successfully', id: codeId, status: 'revoked' });
 });
+
+// ==========================================
+// SUGGESTIONS MANAGEMENT (SUPER ADMIN)
+// ==========================================
+
+// GET /api/admin/suggestions - List all submitted user suggestions
+adminRouter.get('/suggestions', (req: Request, res: Response) => {
+  const status = req.query.status as string | undefined;
+  let query = `
+    SELECT s.*, u.email as user_account_email
+    FROM suggestions s
+    JOIN users u ON s.user_id = u.id
+  `;
+  const params: any[] = [];
+  if (status && ['pending', 'reviewed', 'resolved'].includes(status)) {
+    query += ' WHERE s.status = ?';
+    params.push(status);
+  }
+  query += ' ORDER BY s.created_at DESC';
+
+  const suggestions = req.db.prepare(query).all(...params);
+  res.json(suggestions);
+});
+
+// PATCH /api/admin/suggestions/:id - Update status (pending, reviewed, resolved) or admin notes
+adminRouter.patch('/suggestions/:id', (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  const updateSchema = z.object({
+    status: z.enum(['pending', 'reviewed', 'resolved']).optional(),
+    admin_notes: z.string().optional().nullable(),
+  });
+  const parseResult = updateSchema.safeParse(req.body);
+  if (!parseResult.success) {
+    res.status(400).json({ error: 'VALIDATION_ERROR', details: parseResult.error.format() });
+    return;
+  }
+
+  const current = req.db.prepare('SELECT * FROM suggestions WHERE id = ?').get(id) as any;
+  if (!current) {
+    res.status(404).json({ error: 'NOT_FOUND', message: 'Suggestion not found' });
+    return;
+  }
+
+  const newStatus = parseResult.data.status || current.status;
+  const newNotes = parseResult.data.admin_notes !== undefined ? parseResult.data.admin_notes : current.admin_notes;
+
+  req.db.prepare(`
+    UPDATE suggestions
+    SET status = ?, admin_notes = ?, updated_at = datetime('now')
+    WHERE id = ?
+  `).run(newStatus, newNotes, id);
+
+  const updated = req.db.prepare('SELECT * FROM suggestions WHERE id = ?').get(id);
+  res.json({ message: 'Suggestion updated', suggestion: updated });
+});
+
+// DELETE /api/admin/suggestions/:id - Delete inappropriate suggestion
+adminRouter.delete('/suggestions/:id', (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  const current = req.db.prepare('SELECT * FROM suggestions WHERE id = ?').get(id) as any;
+  if (!current) {
+    res.status(404).json({ error: 'NOT_FOUND', message: 'Suggestion not found' });
+    return;
+  }
+
+  req.db.prepare('DELETE FROM suggestions WHERE id = ?').run(id);
+  res.json({ message: 'Suggestion deleted successfully', id });
+});

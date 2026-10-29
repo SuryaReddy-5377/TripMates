@@ -33,6 +33,8 @@ import {
   KeyRound,
   Copy,
   Check,
+  Lightbulb,
+  MessageSquare,
 } from 'lucide-react';
 
 interface Props {
@@ -44,7 +46,7 @@ interface Props {
 export const AdminDashboard: React.FC<Props> = ({ onExitAdmin, onSelectTrip, onLogout }) => {
   const { t, formatINR } = useI18n();
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'families' | 'members' | 'invite_codes' | 'trips' | 'expenses' | 'audit'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'families' | 'members' | 'invite_codes' | 'trips' | 'expenses' | 'suggestions' | 'audit'>('overview');
   const [loading, setLoading] = useState(false);
 
   // Overview metrics
@@ -96,6 +98,13 @@ export const AdminDashboard: React.FC<Props> = ({ onExitAdmin, onSelectTrip, onL
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [auditSearch, setAuditSearch] = useState('');
   const [expandedLogId, setExpandedLogId] = useState<number | null>(null);
+
+  // Suggestions state
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [suggestionFilter, setSuggestionFilter] = useState<'all' | 'pending' | 'reviewed' | 'resolved'>('all');
+  const [suggestionSearch, setSuggestionSearch] = useState('');
+  const [deleteSuggestionModal, setDeleteSuggestionModal] = useState<{ isOpen: boolean; suggestion?: any }>({ isOpen: false });
+  const [actionLoadingId, setActionLoadingId] = useState<number | null>(null);
 
   // Fetch overview metrics
   const loadOverview = async () => {
@@ -220,6 +229,43 @@ export const AdminDashboard: React.FC<Props> = ({ onExitAdmin, onSelectTrip, onL
     }
   };
 
+  const loadSuggestions = async () => {
+    try {
+      setLoading(true);
+      const data = await api.get('/admin/suggestions');
+      setSuggestions(data || []);
+    } catch (err) {
+      console.error('Failed to load suggestions:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateSuggestionStatus = async (id: number, status: 'pending' | 'reviewed' | 'resolved') => {
+    try {
+      setActionLoadingId(id);
+      await api.patch(`/admin/suggestions/${id}`, { status });
+      setSuggestions(prev => prev.map(s => s.id === id ? { ...s, status } : s));
+    } catch (err: any) {
+      alert(err.message || 'Failed to update suggestion status');
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleDeleteSuggestion = async (id: number) => {
+    try {
+      setActionLoadingId(id);
+      await api.delete(`/admin/suggestions/${id}`);
+      setSuggestions(prev => prev.filter(s => s.id !== id));
+      setDeleteSuggestionModal({ isOpen: false });
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete suggestion');
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
   useEffect(() => {
     if (activeTab === 'overview') loadOverview();
     if (activeTab === 'families') loadFamilies();
@@ -230,6 +276,7 @@ export const AdminDashboard: React.FC<Props> = ({ onExitAdmin, onSelectTrip, onL
     }
     if (activeTab === 'trips') loadTrips();
     if (activeTab === 'expenses') loadExpenses();
+    if (activeTab === 'suggestions') loadSuggestions();
     if (activeTab === 'audit') loadAuditLogs();
   }, [activeTab]);
 
@@ -471,6 +518,7 @@ export const AdminDashboard: React.FC<Props> = ({ onExitAdmin, onSelectTrip, onL
           { key: 'invite_codes', label: t.familyInviteCodes || 'Invite Codes', icon: <KeyRound size={16} /> },
           { key: 'trips', label: t.tripManagement, icon: <Compass size={16} /> },
           { key: 'expenses', label: t.expenseManagement, icon: <Receipt size={16} /> },
+          { key: 'suggestions', label: t.adminSuggestionsTab, icon: <Lightbulb size={16} /> },
           { key: 'audit', label: t.auditLog, icon: <Shield size={16} /> },
         ].map(item => (
           <button
@@ -1686,6 +1734,302 @@ export const AdminDashboard: React.FC<Props> = ({ onExitAdmin, onSelectTrip, onL
         )}
 
         {/* ==================================================================== */}
+        {/* TAB: USER SUGGESTIONS & FEEDBACK */}
+        {/* ==================================================================== */}
+        {activeTab === 'suggestions' && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '1rem' }}>
+              <div>
+                <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.5rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
+                  {t.adminSuggestionsTab}
+                </h2>
+                <p style={{ fontSize: '0.85rem', color: '#64748b', margin: '0.25rem 0 0 0' }}>
+                  {t.adminSuggestionsDesc}
+                </p>
+              </div>
+
+              {/* Status Filter Pills */}
+              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                {[
+                  { id: 'all', label: t.filterAll },
+                  { id: 'pending', label: t.statusPending },
+                  { id: 'reviewed', label: t.statusReviewed },
+                  { id: 'resolved', label: t.statusResolved },
+                ].map(f => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => setSuggestionFilter(f.id as any)}
+                    style={{
+                      padding: '0.4rem 0.85rem',
+                      borderRadius: '9999px',
+                      border: suggestionFilter === f.id ? '1.5px solid #0f172a' : '1px solid #cbd5e1',
+                      background: suggestionFilter === f.id ? '#0f172a' : '#ffffff',
+                      color: suggestionFilter === f.id ? '#ffffff' : '#475569',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Search Input */}
+            <div style={{ marginBottom: '1.25rem', position: 'relative', maxWidth: '400px' }}>
+              <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+              <input
+                type="text"
+                placeholder="Search by sender, email, title, or keywords..."
+                value={suggestionSearch}
+                onChange={e => setSuggestionSearch(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '0.55rem 0.75rem 0.55rem 2.25rem',
+                  borderRadius: '10px',
+                  border: '1px solid #cbd5e1',
+                  fontSize: '0.85rem',
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+
+            {/* Suggestions List */}
+            {(() => {
+              const filtered = suggestions.filter(s => {
+                if (suggestionFilter !== 'all' && s.status !== suggestionFilter) return false;
+                if (suggestionSearch.trim()) {
+                  const q = suggestionSearch.toLowerCase();
+                  const matchName = (s.sender_name || '').toLowerCase().includes(q);
+                  const matchEmail = (s.sender_email || '').toLowerCase().includes(q);
+                  const matchTitle = (s.title || '').toLowerCase().includes(q);
+                  const matchMsg = (s.message || '').toLowerCase().includes(q);
+                  return matchName || matchEmail || matchTitle || matchMsg;
+                }
+                return true;
+              });
+
+              if (filtered.length === 0) {
+                return (
+                  <div
+                    style={{
+                      background: '#ffffff',
+                      borderRadius: '16px',
+                      border: '1px solid #e2e8f0',
+                      padding: '3.5rem 1.5rem',
+                      textAlign: 'center',
+                      color: '#64748b',
+                    }}
+                  >
+                    <Lightbulb size={36} style={{ color: '#cbd5e1', margin: '0 auto 0.75rem auto' }} />
+                    <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600, color: '#334155' }}>
+                      {t.noSuggestionsFound}
+                    </h3>
+                  </div>
+                );
+              }
+
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  {filtered.map(s => {
+                    const isPending = s.status === 'pending';
+                    const isReviewed = s.status === 'reviewed';
+                    const isResolved = s.status === 'resolved';
+
+                    const statusBg = isResolved ? '#ecfdf5' : isReviewed ? '#eff6ff' : '#fffbeb';
+                    const statusColor = isResolved ? '#059669' : isReviewed ? '#2563eb' : '#d97706';
+                    const statusLabel = isResolved ? t.statusResolved : isReviewed ? t.statusReviewed : t.statusPending;
+
+                    return (
+                      <div
+                        key={s.id}
+                        style={{
+                          background: '#ffffff',
+                          borderRadius: '14px',
+                          border: '1px solid #e2e8f0',
+                          padding: '1.25rem 1.5rem',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                        }}
+                      >
+                        {/* Header metadata */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.65rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                            <div
+                              style={{
+                                width: '32px',
+                                height: '32px',
+                                borderRadius: '50%',
+                                background: '#f1f5f9',
+                                color: '#0f172a',
+                                fontWeight: 700,
+                                fontSize: '0.85rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                              }}
+                            >
+                              {(s.sender_name || 'U').charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                              <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#0f172a' }}>
+                                {s.sender_name}
+                              </div>
+                              <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                                {s.sender_email} · {new Date(s.created_at).toLocaleDateString()}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                            {/* Category pill */}
+                            <span
+                              style={{
+                                fontSize: '0.72rem',
+                                fontWeight: 700,
+                                textTransform: 'uppercase',
+                                padding: '0.2rem 0.55rem',
+                                borderRadius: '6px',
+                                background: '#f8fafc',
+                                border: '1px solid #e2e8f0',
+                                color: '#475569',
+                              }}
+                            >
+                              {s.category}
+                            </span>
+
+                            {/* Status pill */}
+                            <span
+                              style={{
+                                fontSize: '0.72rem',
+                                fontWeight: 700,
+                                padding: '0.2rem 0.65rem',
+                                borderRadius: '9999px',
+                                background: statusBg,
+                                color: statusColor,
+                              }}
+                            >
+                              {statusLabel}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Title & Message */}
+                        <h4 style={{ margin: '0.5rem 0 0.35rem 0', fontSize: '1.05rem', fontWeight: 700, color: '#0f172a' }}>
+                          {s.title}
+                        </h4>
+                        <p style={{ margin: '0 0 1rem 0', fontSize: '0.88rem', color: '#334155', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                          {s.message}
+                        </p>
+
+                        {/* Action buttons */}
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '0.5rem', borderTop: '1px solid #f1f5f9', paddingTop: '0.75rem' }}>
+                          {!isReviewed && (
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateSuggestionStatus(s.id, 'reviewed')}
+                              disabled={actionLoadingId === s.id}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.35rem',
+                                padding: '0.35rem 0.75rem',
+                                borderRadius: '8px',
+                                border: '1px solid #bfdbfe',
+                                background: '#eff6ff',
+                                color: '#1d4ed8',
+                                fontSize: '0.78rem',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              <CheckCircle size={14} />
+                              <span>{t.markReviewed}</span>
+                            </button>
+                          )}
+
+                          {!isResolved && (
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateSuggestionStatus(s.id, 'resolved')}
+                              disabled={actionLoadingId === s.id}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.35rem',
+                                padding: '0.35rem 0.75rem',
+                                borderRadius: '8px',
+                                border: '1px solid #a7f3d0',
+                                background: '#ecfdf5',
+                                color: '#047857',
+                                fontSize: '0.78rem',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              <CheckCircle size={14} />
+                              <span>{t.markResolved}</span>
+                            </button>
+                          )}
+
+                          {!isPending && (
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateSuggestionStatus(s.id, 'pending')}
+                              disabled={actionLoadingId === s.id}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.35rem',
+                                padding: '0.35rem 0.75rem',
+                                borderRadius: '8px',
+                                border: '1px solid #fed7aa',
+                                background: '#fff7ed',
+                                color: '#c2410c',
+                                fontSize: '0.78rem',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              <Clock size={14} />
+                              <span>{t.markPending}</span>
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => setDeleteSuggestionModal({ isOpen: true, suggestion: s })}
+                            disabled={actionLoadingId === s.id}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.35rem',
+                              padding: '0.35rem 0.75rem',
+                              borderRadius: '8px',
+                              border: '1px solid #fecaca',
+                              background: '#fff',
+                              color: '#dc2626',
+                              fontSize: '0.78rem',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <Trash2 size={14} />
+                            <span>{t.delete}</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
+        {/* ==================================================================== */}
         {/* TAB 6: AUDIT LOG VIEWER */}
         {/* ==================================================================== */}
         {activeTab === 'audit' && (
@@ -2386,6 +2730,80 @@ export const AdminDashboard: React.FC<Props> = ({ onExitAdmin, onSelectTrip, onL
                 }}
               >
                 {t.revokeCode || 'Confirm Revoke'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Modal for Deleting Inappropriate Suggestion */}
+      {deleteSuggestionModal.isOpen && deleteSuggestionModal.suggestion && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.5)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2000,
+            padding: '1rem',
+          }}
+          onClick={() => setDeleteSuggestionModal({ isOpen: false })}
+        >
+          <div
+            style={{
+              background: '#ffffff',
+              borderRadius: '20px',
+              maxWidth: '440px',
+              width: '100%',
+              padding: '1.75rem',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginBottom: '1rem' }}>
+              <AlertTriangle size={24} color="#dc2626" />
+              <h3 style={{ fontSize: '1.2rem', fontWeight: 700, margin: 0, color: '#0f172a' }}>
+                {t.deleteSuggestion}
+              </h3>
+            </div>
+            <p style={{ fontSize: '0.88rem', color: '#64748b', lineHeight: 1.5, margin: '0 0 1.5rem 0' }}>
+              {t.deleteSuggestionConfirm}
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.65rem' }}>
+              <button
+                type="button"
+                onClick={() => setDeleteSuggestionModal({ isOpen: false })}
+                style={{
+                  background: '#f1f5f9',
+                  border: 'none',
+                  borderRadius: '10px',
+                  padding: '0.6rem 1.1rem',
+                  fontWeight: 600,
+                  fontSize: '0.88rem',
+                  cursor: 'pointer',
+                  color: '#475569',
+                }}
+              >
+                {t.cancel}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDeleteSuggestion(deleteSuggestionModal.suggestion.id)}
+                disabled={actionLoadingId === deleteSuggestionModal.suggestion.id}
+                style={{
+                  background: '#dc2626',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '10px',
+                  padding: '0.6rem 1.25rem',
+                  fontWeight: 700,
+                  fontSize: '0.88rem',
+                  cursor: 'pointer',
+                }}
+              >
+                {t.delete}
               </button>
             </div>
           </div>

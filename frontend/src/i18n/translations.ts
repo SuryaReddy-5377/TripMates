@@ -349,6 +349,45 @@ export interface Translations {
   fullAuthorization: string;
   superAdminTitle: string;
   superAdminSubtitle: string;
+  // Footer & Creator Info
+  footerCreator: string;
+  footerRights: string;
+  contactDeveloper: string;
+  sendSuggestion: string;
+  suggestionFeatureDesc: string;
+  // Suggestion Modal
+  submitSuggestion: string;
+  suggestionTitle: string;
+  suggestionTitlePlaceholder: string;
+  suggestionMessage: string;
+  suggestionMessagePlaceholder: string;
+  suggestionCategory: string;
+  categoryFeature: string;
+  categoryImprovement: string;
+  categoryFeedback: string;
+  categoryBug: string;
+  categoryOther: string;
+  submittingSuggestion: string;
+  suggestionSuccessTitle: string;
+  suggestionSuccessMessage: string;
+  sendAnotherSuggestion: string;
+  // Admin Suggestions Tab
+  adminSuggestionsTab: string;
+  adminSuggestionsDesc: string;
+  suggestionSender: string;
+  suggestionDate: string;
+  suggestionStatus: string;
+  statusPending: string;
+  statusReviewed: string;
+  statusResolved: string;
+  filterAll: string;
+  markReviewed: string;
+  markResolved: string;
+  markPending: string;
+  deleteSuggestion: string;
+  deleteSuggestionConfirm: string;
+  noSuggestionsFound: string;
+  invitationCodeOptional: string;
 }
 
 export const translations: Record<Language, Translations> = {
@@ -693,6 +732,45 @@ export const translations: Record<Language, Translations> = {
     fullAuthorization: 'Full Authorization',
     superAdminTitle: 'TripMates Super Admin',
     superAdminSubtitle: 'Authenticated Management Dashboard & Audit Inspector',
+    // Footer & Creator Info
+    footerCreator: 'Created with passion by Surya Reddy',
+    footerRights: 'All rights reserved. Designed for hassle-free group travel & expense sharing.',
+    contactDeveloper: 'Contact Developer',
+    sendSuggestion: 'Send Suggestion',
+    suggestionFeatureDesc: 'Have feedback or a feature idea? Let us know!',
+    // Suggestion Modal
+    submitSuggestion: 'Submit Suggestion',
+    suggestionTitle: 'Suggestion / Feedback Title',
+    suggestionTitlePlaceholder: 'e.g., Export expenses to PDF, Dark mode...',
+    suggestionMessage: 'Details & Description',
+    suggestionMessagePlaceholder: 'Explain your idea or report an issue in detail...',
+    suggestionCategory: 'Category',
+    categoryFeature: 'Feature Request',
+    categoryImprovement: 'Improvement',
+    categoryFeedback: 'General Feedback',
+    categoryBug: 'Bug Report',
+    categoryOther: 'Other',
+    submittingSuggestion: 'Submitting...',
+    suggestionSuccessTitle: 'Thank You for Your Suggestion!',
+    suggestionSuccessMessage: 'Your feedback has been received and will be reviewed by the admin. We appreciate your contribution to making TripMates better!',
+    sendAnotherSuggestion: 'Send Another Suggestion',
+    // Admin Suggestions Tab
+    adminSuggestionsTab: 'Suggestions & Feedback',
+    adminSuggestionsDesc: 'Review member feedback, feature requests, and ideas submitted across TripMates.',
+    suggestionSender: 'Sender',
+    suggestionDate: 'Date',
+    suggestionStatus: 'Status',
+    statusPending: 'Pending',
+    statusReviewed: 'Reviewed',
+    statusResolved: 'Resolved',
+    filterAll: 'All',
+    markReviewed: 'Mark Reviewed',
+    markResolved: 'Mark Resolved',
+    markPending: 'Mark Pending',
+    deleteSuggestion: 'Delete Suggestion',
+    deleteSuggestionConfirm: 'Are you sure you want to delete this suggestion? This action cannot be undone.',
+    noSuggestionsFound: 'No suggestions found.',
+    invitationCodeOptional: 'Invitation Code (Optional - enter if you received an invitation)',
   },
   te: {
     appName: 'ట్రిప్‌మేట్స్',
@@ -1035,5 +1113,44 @@ export const translations: Record<Language, Translations> = {
     fullAuthorization: 'పూర్తి అనుమతులు',
     superAdminTitle: 'ట్రిప్‌మేట్స్ సూపర్ అడ్మిన్',
     superAdminSubtitle: 'నిర్వహణ డాష్‌బోర్డ్ & ఆడిట్ రికార్డులు',
+    // Footer & Creator Info
+    footerCreator: 'సూర్య రెడ్డి చేత ప్రత్యేకంగా రూపొందించబడింది',
+    footerRights: 'సర్వహక్కులు ప్రత్యేకించబడ్డాయి. ఉల్లాసకరమైన సమూహ యాత్రలు మరియు సులువైన ఖర్చుల నిర్వహణ కోసం.',
+    contactDeveloper: 'డెవలపర్‌ను సంప్రదించండి',
+    sendSuggestion: 'సలహా పంపండి',
+    suggestionFeatureDesc: 'ట్రిప్‌మేట్స్‌ను మెరుగుపరచడానికి మీ ఆలోచన లేదా సలహాను తెలియజేయండి!',
+    // Suggestion Modal
+    submitSuggestion: 'సలహాను పంపండి',
+    suggestionTitle: 'సలహా / అభిప్రాయం శీర్షిక',
+    suggestionTitlePlaceholder: 'ఉదా: ఖర్చులను PDF రూపంలో ఎగుమతి చేయడం, డార్క్ మోడ్...',
+    suggestionMessage: 'పూర్తి వివరాలు',
+    suggestionMessagePlaceholder: 'మీ ఆలోచనను లేదా సమస్యను వివరణాత్మకంగా తెలపండి...',
+    suggestionCategory: 'విభాగం',
+    categoryFeature: 'కొత్త ఫీచర్ అభ్యర్థన',
+    categoryImprovement: 'మెరుగుదల',
+    categoryFeedback: 'సాధారణ అభిప్రాయం',
+    categoryBug: 'సాంకేతిక లోపం / బగ్',
+    categoryOther: 'ఇతర',
+    submittingSuggestion: 'పంపుతోంది...',
+    suggestionSuccessTitle: 'మీ సలహాకు ధన్యవాదాలు!',
+    suggestionSuccessMessage: 'మీ విలువైన సలహా విజయవంతంగా చేరింది. అడ్మిన్ దీనిని త్వరలోనే సమీక్షిస్తారు. ట్రిప్‌మేట్స్‌ను మెరుగుపరచడంలో మీ తోడ్పాటుకు ధన్యవాదాలు!',
+    sendAnotherSuggestion: 'మరొక సలహాను పంపండి',
+    // Admin Suggestions Tab
+    adminSuggestionsTab: 'సలహాలు & అభిప్రాయాలు',
+    adminSuggestionsDesc: 'సభ్యులు పంపిన అభిప్రాయాలు, ఆలోచనలు మరియు ఫీచర్ అభ్యర్థనలను సమీక్షించండి.',
+    suggestionSender: 'పంపినవారు',
+    suggestionDate: 'తేదీ',
+    suggestionStatus: 'స్థితి',
+    statusPending: 'పరిశీలనలో ఉంది',
+    statusReviewed: 'సమీక్షించబడింది',
+    statusResolved: 'పరిష్కరించబడింది',
+    filterAll: 'అన్నీ',
+    markReviewed: 'సమీక్షించినట్లు గుర్తించు',
+    markResolved: 'పరిష్కరించినట్లు గుర్తించు',
+    markPending: 'పెండింగ్‌గా ఉంచు',
+    deleteSuggestion: 'సలహాను తొలగించు',
+    deleteSuggestionConfirm: 'మీరు ఖచ్చితంగా ఈ సలహాను తొలగించాలనుకుంటున్నారా? దీనిని వెనక్కి తీసుకోలేరు.',
+    noSuggestionsFound: 'ఎటువంటి సలహాలు లభించలేదు.',
+    invitationCodeOptional: 'ఆహ్వాన కోడ్ (ఐచ్ఛికం - మీకు ఆహ్వాన కోడ్ ఉంటే నమోదు చేయండి)',
   },
 };

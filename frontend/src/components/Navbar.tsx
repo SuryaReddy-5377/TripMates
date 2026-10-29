@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useI18n } from '../i18n/context';
 import { NatureLogo } from './NatureBanners';
-import { LogOut, Globe, Shield, Home, Users, Compass, MapPinned, ShieldAlert, User } from 'lucide-react';
+import { LogOut, Globe, Shield, Home, Users, Compass, MapPinned, ShieldAlert, User, Lightbulb } from 'lucide-react';
 import { NotificationCenter } from './NotificationCenter';
 import { ProfileModal } from './ProfileModal';
 
@@ -14,6 +14,7 @@ interface Props {
   setActiveNav: (nav: string) => void;
   onSelectTrip?: (tripId: number) => void;
   onOpenProfile?: () => void;
+  onOpenSuggestion?: () => void;
 }
 
 export const Navbar: React.FC<Props> = ({
@@ -25,6 +26,7 @@ export const Navbar: React.FC<Props> = ({
   setActiveNav,
   onSelectTrip,
   onOpenProfile,
+  onOpenSuggestion,
 }) => {
   const { language, setLanguage, t } = useI18n();
 
@@ -168,6 +170,32 @@ export const Navbar: React.FC<Props> = ({
               తెలుగు
             </button>
           </div>
+
+          {/* Send Suggestion button */}
+          {onOpenSuggestion && (
+            <button
+              type="button"
+              onClick={onOpenSuggestion}
+              title={t.sendSuggestion}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                padding: '0.35rem 0.65rem',
+                borderRadius: '8px',
+                border: '1px solid #fef08a',
+                background: '#fefce8',
+                color: '#854d0e',
+                fontSize: '0.78rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <Lightbulb size={14} />
+              <span className="hide-mobile">{t.sendSuggestion}</span>
+            </button>
+          )}
 
           {/* User Profile Pill & Trigger */}
           <div style={{

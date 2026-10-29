@@ -18,11 +18,13 @@ const quickLoginSchema = z.object({
 });
 
 const registerInviteSchema = z.object({
-  invite_code: z.string().min(4),
+  invite_code: z.string().optional().nullable(),
   email: z.string().email(),
   password: z.string().min(6),
   displayName: z.string().min(2),
 });
+
+const registerSchema = registerInviteSchema;
 
 const setupAdminSchema = z.object({
   email: z.string().email(),
@@ -76,7 +78,7 @@ authRouter.post('/setup-admin', (req: Request, res: Response) => {
   }
 });
 
-authRouter.post('/login', (req: Request, res: Response) => {
+const handleLogin = (req: Request, res: Response) => {
   const parseResult = loginSchema.safeParse(req.body);
   if (!parseResult.success) {
     res.status(400).json({ error: 'VALIDATION_ERROR', details: parseResult.error.format() });
@@ -143,7 +145,10 @@ authRouter.post('/login', (req: Request, res: Response) => {
     person: personRow || null,
     family: familyRow || null,
   });
-});
+};
+
+authRouter.post('/login', handleLogin);
+authRouter.post('/signin', handleLogin);
 
 authRouter.post('/quick-login', (req: Request, res: Response) => {
   const parseResult = quickLoginSchema.safeParse(req.body);
@@ -213,31 +218,119 @@ authRouter.post('/quick-login', (req: Request, res: Response) => {
   });
 });
 
-authRouter.post('/register-invite', (req: Request, res: Response) => {
-  const parseResult = registerInviteSchema.safeParse(req.body);
+const handleRegister = (req: Request, res: Response) => {
+  const parseResult = registerSchema.safeParse(req.body);
   if (!parseResult.success) {
     res.status(400).json({ error: 'VALIDATION_ERROR', details: parseResult.error.format() });
     return;
   }
   const { invite_code, email, password, displayName } = parseResult.data;
+  const cleanCode = (invite_code || '').trim();
 
-  // 1. Check family_invite_codes table first
-  const famCode = req.db.prepare(`
-    SELECT * FROM family_invite_codes
-    WHERE code = ? COLLATE NOCASE
-  `).get(invite_code) as any;
+  // If an invite code was supplied, validate it:
+  if (cleanCode.length > 0) {
+    // 1. Check family_invite_codes table first
+    const famCode = req.db.prepare(`
+      SELECT * FROM family_invite_codes
+      WHERE code = ? COLLATE NOCASE
+    `).get(cleanCode) as any;
 
-  if (famCode) {
-    if (famCode.status !== 'active') {
-      res.status(400).json({ error: 'CODE_INACTIVE', message: 'This family invite code has been revoked or exhausted.' });
-      return;
+    if (famCode) {
+      if (famCode.status !== 'active') {
+        res.status(400).json({ error: 'CODE_INACTIVE', message: 'This family invite code has been revoked or exhausted.' });
+        return;
+      }
+      if (famCode.expires_at && new Date(famCode.expires_at) < new Date()) {
+        res.status(400).json({ error: 'CODE_EXPIRED', message: 'This family invite code has expired.' });
+        return;
+      }
+      if (famCode.uses_count >= famCode.max_uses) {
+        res.status(400).json({ error: 'CODE_EXHAUSTED', message: 'This family invite code has reached its maximum usage limit.' });
+        return;
+      }
+
+      const existingUser = req.db.prepare('SELECT id FROM users WHERE email = ? COLLATE NOCASE').get(email);
+      if (existingUser) {
+        res.status(400).json({ error: 'USER_EXISTS', message: 'An account with this email already exists. Please sign in instead.' });
+        return;
+      }
+
+      const hashedPassword = hashPassword(password);
+
+      try {
+        const result = withTransaction(req.db, () => {
+          // Concurrency-safe atomic check and update of usage limit inside transaction
+          const updated = req.db.prepare(`
+            UPDATE family_invite_codes
+            SET uses_count = uses_count + 1,
+                status = CASE WHEN uses_count + 1 >= max_uses THEN 'exhausted' ELSE status END
+            WHERE id = ? AND status = 'active' AND uses_count < max_uses
+          `).run(famCode.id);
+
+          if (updated.changes === 0) {
+            throw new Error('This invite code usage limit was exceeded or is no longer active.');
+          }
+
+          const userRes = req.db.prepare(`
+            INSERT INTO users (email, password_hash, role)
+            VALUES (?, ?, 'member')
+          `).run(email, hashedPassword);
+          const userId = Number(userRes.lastInsertRowid);
+
+          const personRes = req.db.prepare(`
+            INSERT INTO persons (display_name, user_id)
+            VALUES (?, ?)
+          `).run(displayName, userId);
+          const personId = Number(personRes.lastInsertRowid);
+
+          let family = null;
+          if (famCode.family_id) {
+            req.db.prepare(`
+              INSERT INTO family_memberships (family_id, person_id)
+              VALUES (?, ?)
+            `).run(famCode.family_id, personId);
+            family = req.db.prepare('SELECT * FROM families WHERE id = ?').get(famCode.family_id);
+          }
+
+          const session = createSession(req.db, userId);
+
+          res.cookie('session_token', session.token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            maxAge: 30 * 24 * 60 * 60 * 1000,
+          });
+
+          const user = { id: userId, email, role: 'member', is_active: 1 };
+          const person = { id: personId, display_name: displayName, user_id: userId, is_active: 1 };
+
+          return { user, person, family, token: session.token };
+        });
+
+        res.status(201).json({
+          message: 'Registration successful',
+          token: result.token,
+          user: result.user,
+          person: result.person,
+          family: result.family,
+        });
+        return;
+      } catch (err: any) {
+        res.status(400).json({ error: 'REGISTRATION_FAILED', message: err.message });
+        return;
+      }
     }
-    if (famCode.expires_at && new Date(famCode.expires_at) < new Date()) {
-      res.status(400).json({ error: 'CODE_EXPIRED', message: 'This family invite code has expired.' });
-      return;
-    }
-    if (famCode.uses_count >= famCode.max_uses) {
-      res.status(400).json({ error: 'CODE_EXHAUSTED', message: 'This family invite code has reached its maximum usage limit.' });
+
+    // 2. Fall back to existing trip-based invitations
+    const invite = req.db.prepare(`
+      SELECT i.*, t.name as trip_name
+      FROM invitations i
+      JOIN trips t ON i.trip_id = t.id
+      WHERE i.invite_code = ? COLLATE NOCASE AND i.status = 'pending'
+    `).get(cleanCode) as any;
+
+    if (!invite) {
+      res.status(404).json({ error: 'INVALID_INVITE', message: 'Invalid or expired invitation code' });
       return;
     }
 
@@ -251,18 +344,6 @@ authRouter.post('/register-invite', (req: Request, res: Response) => {
 
     try {
       const result = withTransaction(req.db, () => {
-        // Concurrency-safe atomic check and update of usage limit inside transaction
-        const updated = req.db.prepare(`
-          UPDATE family_invite_codes
-          SET uses_count = uses_count + 1,
-              status = CASE WHEN uses_count + 1 >= max_uses THEN 'exhausted' ELSE status END
-          WHERE id = ? AND status = 'active' AND uses_count < max_uses
-        `).run(famCode.id);
-
-        if (updated.changes === 0) {
-          throw new Error('This invite code usage limit was exceeded or is no longer active.');
-        }
-
         const userRes = req.db.prepare(`
           INSERT INTO users (email, password_hash, role)
           VALUES (?, ?, 'member')
@@ -275,14 +356,23 @@ authRouter.post('/register-invite', (req: Request, res: Response) => {
         `).run(displayName, userId);
         const personId = Number(personRes.lastInsertRowid);
 
-        let family = null;
-        if (famCode.family_id) {
+        if (invite.family_id) {
           req.db.prepare(`
             INSERT INTO family_memberships (family_id, person_id)
             VALUES (?, ?)
-          `).run(famCode.family_id, personId);
-          family = req.db.prepare('SELECT * FROM families WHERE id = ?').get(famCode.family_id);
+          `).run(invite.family_id, personId);
         }
+
+        req.db.prepare(`
+          INSERT OR IGNORE INTO trip_participants (trip_id, person_id, attendance)
+          VALUES (?, ?, 'coming')
+        `).run(invite.trip_id, personId);
+
+        req.db.prepare(`
+          UPDATE invitations
+          SET status = 'accepted', person_id = COALESCE(person_id, ?)
+          WHERE id = ?
+        `).run(personId, invite.id);
 
         const session = createSession(req.db, userId);
 
@@ -295,6 +385,10 @@ authRouter.post('/register-invite', (req: Request, res: Response) => {
 
         const user = { id: userId, email, role: 'member', is_active: 1 };
         const person = { id: personId, display_name: displayName, user_id: userId, is_active: 1 };
+        let family = null;
+        if (invite.family_id) {
+          family = req.db.prepare('SELECT * FROM families WHERE id = ?').get(invite.family_id);
+        }
 
         return { user, person, family, token: session.token };
       });
@@ -308,24 +402,12 @@ authRouter.post('/register-invite', (req: Request, res: Response) => {
       });
       return;
     } catch (err: any) {
-      res.status(400).json({ error: 'REGISTRATION_FAILED', message: err.message });
+      res.status(500).json({ error: 'REGISTRATION_FAILED', message: err.message });
       return;
     }
   }
 
-  // 2. Fall back to existing trip-based invitations
-  const invite = req.db.prepare(`
-    SELECT i.*, t.name as trip_name
-    FROM invitations i
-    JOIN trips t ON i.trip_id = t.id
-    WHERE i.invite_code = ? COLLATE NOCASE AND i.status = 'pending'
-  `).get(invite_code) as any;
-
-  if (!invite) {
-    res.status(404).json({ error: 'INVALID_INVITE', message: 'Invalid or expired invitation code' });
-    return;
-  }
-
+  // 3. Direct registration (no invite code provided)
   const existingUser = req.db.prepare('SELECT id FROM users WHERE email = ? COLLATE NOCASE').get(email);
   if (existingUser) {
     res.status(400).json({ error: 'USER_EXISTS', message: 'An account with this email already exists. Please sign in instead.' });
@@ -348,24 +430,20 @@ authRouter.post('/register-invite', (req: Request, res: Response) => {
       `).run(displayName, userId);
       const personId = Number(personRes.lastInsertRowid);
 
-      if (invite.family_id) {
-        req.db.prepare(`
-          INSERT INTO family_memberships (family_id, person_id)
-          VALUES (?, ?)
-        `).run(invite.family_id, personId);
-      }
+      // Create a default personal family for this newly registered user
+      const famName = `${displayName}'s Family`;
+      const famRes = req.db.prepare(`
+        INSERT INTO families (name, admin_user_id)
+        VALUES (?, ?)
+      `).run(famName, userId);
+      const familyId = Number(famRes.lastInsertRowid);
 
       req.db.prepare(`
-        INSERT OR IGNORE INTO trip_participants (trip_id, person_id, attendance)
-        VALUES (?, ?, 'coming')
-      `).run(invite.trip_id, personId);
+        INSERT INTO family_memberships (family_id, person_id)
+        VALUES (?, ?)
+      `).run(familyId, personId);
 
-      req.db.prepare(`
-        UPDATE invitations
-        SET status = 'accepted', person_id = COALESCE(person_id, ?)
-        WHERE id = ?
-      `).run(personId, invite.id);
-
+      const family = req.db.prepare('SELECT * FROM families WHERE id = ?').get(familyId);
       const session = createSession(req.db, userId);
 
       res.cookie('session_token', session.token, {
@@ -375,14 +453,12 @@ authRouter.post('/register-invite', (req: Request, res: Response) => {
         maxAge: 30 * 24 * 60 * 60 * 1000,
       });
 
-      const user = { id: userId, email, role: 'member', is_active: 1 };
-      const person = { id: personId, display_name: displayName, user_id: userId, is_active: 1 };
-      let family = null;
-      if (invite.family_id) {
-        family = req.db.prepare('SELECT * FROM families WHERE id = ?').get(invite.family_id);
-      }
-
-      return { user, person, family, token: session.token };
+      return {
+        user: { id: userId, email, role: 'member', is_active: 1 },
+        person: { id: personId, display_name: displayName, user_id: userId, is_active: 1 },
+        family,
+        token: session.token,
+      };
     });
 
     res.status(201).json({
@@ -395,7 +471,11 @@ authRouter.post('/register-invite', (req: Request, res: Response) => {
   } catch (err: any) {
     res.status(500).json({ error: 'REGISTRATION_FAILED', message: err.message });
   }
-});
+};
+
+authRouter.post('/register', handleRegister);
+authRouter.post('/signup', handleRegister);
+authRouter.post('/register-invite', handleRegister);
 
 authRouter.post('/logout', (req: Request, res: Response) => {
   if (req.sessionToken) {

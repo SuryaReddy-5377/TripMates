@@ -16,6 +16,7 @@ import {
   Eye,
   EyeOff,
 } from 'lucide-react';
+import { Footer } from './Footer';
 
 interface RememberedAccount {
   email: string;
@@ -148,13 +149,15 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess }) =>
         saveRememberedAccount(email, displayName);
         onAuthSuccess(res);
       } else if (tab === 'register') {
-        // Register with invite code
-        const res = await api.post('/auth/register-invite', {
-          invite_code: inviteCode.trim(),
+        const payload: any = {
           email: email.trim(),
           password,
           displayName: displayName.trim(),
-        });
+        };
+        if (inviteCode.trim()) {
+          payload.invite_code = inviteCode.trim();
+        }
+        const res = await api.post('/auth/register', payload);
         if (res.token) {
           localStorage.setItem('tripmates_token', res.token);
         }
@@ -438,6 +441,8 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess }) =>
             </ul>
           </div>
         </div>
+
+        <Footer />
       </div>
     );
   }
@@ -860,15 +865,14 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess }) =>
             {/* If Registering with Invite Code */}
             {tab === 'register' && hasSuperAdmin && (
               <div className="form-group" style={{ margin: 0 }}>
-                <label className="form-label">{t.invitationCode}</label>
+                <label className="form-label">{t.invitationCodeOptional}</label>
                 <input
                   type="text"
                   id="auth-invite-code"
                   className="form-input"
-                  placeholder="e.g. TRIP-789A or FAM-1234"
+                  placeholder="e.g. TRIP-789A or FAM-1234 (optional)"
                   value={inviteCode}
                   onChange={e => setInviteCode(e.target.value.toUpperCase())}
-                  required
                 />
               </div>
             )}

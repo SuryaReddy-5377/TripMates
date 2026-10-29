@@ -18,6 +18,7 @@ import { invitationsRouter, globalInvitationsRouter } from './routes/invitations
 import { auditRouter } from './routes/audit.routes';
 import { notificationsRouter } from './routes/notifications.routes';
 import { adminRouter } from './routes/admin.routes';
+import { suggestionsRouter } from './routes/suggestions.routes';
 
 export function createApp(): Express {
   const app = express();
@@ -43,7 +44,9 @@ export function createApp(): Express {
 
   // Mount API routers
   app.use('/api/auth', authRouter);
+  app.use('/api', authRouter); // Support direct /api/login, /api/signin, /api/register, /api/signup
   app.use('/api/admin', adminRouter);
+  app.use('/api/suggestions', suggestionsRouter);
   app.use('/api/notifications', notificationsRouter);
   app.use('/api/families', familiesRouter);
   app.use('/api/persons', personsRouter);
