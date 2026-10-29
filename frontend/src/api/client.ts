@@ -4,7 +4,12 @@ export interface ApiResponse<T = any> {
   message?: string;
 }
 
-const RAW_BASE_URL = ((import.meta as any).env?.VITE_API_BASE_URL as string | undefined) || '/api';
+const envBaseUrl = (import.meta as any).env?.VITE_API_BASE_URL as string | undefined;
+const isProductionHost = typeof window !== 'undefined' &&
+  window.location.hostname !== 'localhost' &&
+  window.location.hostname !== '127.0.0.1';
+
+const RAW_BASE_URL = envBaseUrl || (isProductionHost ? 'https://tripmates-backend.onrender.com/api' : '/api');
 const BASE_URL = RAW_BASE_URL.replace(/\/+$/, '');
 
 export async function request<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {

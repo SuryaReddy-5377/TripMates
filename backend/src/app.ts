@@ -37,7 +37,17 @@ export function createApp(): Express {
   // Attach database and authenticate session
   app.use(attachDbAndSession);
 
-  // Health check
+  // Root info & health check
+  app.get('/', (_req: Request, res: Response) => {
+    res.json({
+      status: 'ok',
+      service: 'TripMates API Backend',
+      message: 'Backend server is running smoothly on Render.',
+      healthCheck: '/api/health',
+      timestamp: new Date().toISOString(),
+    });
+  });
+
   app.get('/api/health', (_req: Request, res: Response) => {
     res.json({ status: 'ok', service: 'tripmates-api', timestamp: new Date().toISOString() });
   });
