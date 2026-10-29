@@ -30,7 +30,9 @@ export async function request<T = any>(endpoint: string, options: RequestInit = 
   const data = isJson ? await response.json() : await response.text();
 
   if (!response.ok) {
-    let errorMsg = `HTTP ${response.status}`;
+    let errorMsg = response.status === 404
+      ? 'Backend service unreachable or route not found (HTTP 404). Please ensure the backend server is running on port 4000.'
+      : `HTTP ${response.status}`;
     if (data && typeof data === 'object') {
       if (data.message) {
         errorMsg = data.message;
