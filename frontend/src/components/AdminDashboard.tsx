@@ -38,9 +38,10 @@ import {
 interface Props {
   onExitAdmin: () => void;
   onSelectTrip?: (tripId: number) => void;
+  onLogout?: () => void;
 }
 
-export const AdminDashboard: React.FC<Props> = ({ onExitAdmin, onSelectTrip }) => {
+export const AdminDashboard: React.FC<Props> = ({ onExitAdmin, onSelectTrip, onLogout }) => {
   const { t, formatINR } = useI18n();
 
   const [activeTab, setActiveTab] = useState<'overview' | 'families' | 'members' | 'invite_codes' | 'trips' | 'expenses' | 'audit'>('overview');
@@ -428,6 +429,27 @@ export const AdminDashboard: React.FC<Props> = ({ onExitAdmin, onSelectTrip }) =
             <span>Exit Admin</span>
             <ArrowRight size={14} />
           </button>
+          {onLogout && (
+            <button
+              type="button"
+              onClick={onLogout}
+              style={{
+                background: 'rgba(239, 68, 68, 0.15)',
+                color: '#fca5a5',
+                border: '1px solid rgba(239, 68, 68, 0.35)',
+                borderRadius: '9px',
+                padding: '0.45rem 0.95rem',
+                fontSize: '0.82rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+              }}
+            >
+              <span>{t.logout || 'Logout'}</span>
+            </button>
+          )}
         </div>
       </header>
 

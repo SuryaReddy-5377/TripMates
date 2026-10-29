@@ -13,6 +13,7 @@ interface Props {
   activeNav: string;
   setActiveNav: (nav: string) => void;
   onSelectTrip?: (tripId: number) => void;
+  onOpenProfile?: () => void;
 }
 
 export const Navbar: React.FC<Props> = ({
@@ -23,9 +24,9 @@ export const Navbar: React.FC<Props> = ({
   activeNav,
   setActiveNav,
   onSelectTrip,
+  onOpenProfile,
 }) => {
   const { language, setLanguage, t } = useI18n();
-  const [showProfileModal, setShowProfileModal] = useState(false);
 
   return (
     <nav style={{
@@ -182,7 +183,7 @@ export const Navbar: React.FC<Props> = ({
           }}>
             <button
               type="button"
-              onClick={() => setShowProfileModal(true)}
+              onClick={() => onOpenProfile && onOpenProfile()}
               style={{
                 background: 'none',
                 border: 'none',
@@ -237,13 +238,6 @@ export const Navbar: React.FC<Props> = ({
           </div>
         </div>
       </div>
-
-      {showProfileModal && (
-        <ProfileModal
-          onClose={() => setShowProfileModal(false)}
-          onProfileUpdated={() => window.location.reload()}
-        />
-      )}
     </nav>
   );
 };

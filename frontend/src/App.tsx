@@ -8,6 +8,7 @@ import { AuditView } from './components/AuditView';
 import { AuthScreen } from './components/AuthScreen';
 import { AdminLogin } from './components/AdminLogin';
 import { AdminDashboard } from './components/AdminDashboard';
+import { ProfileModal } from './components/ProfileModal';
 
 export const App: React.FC = () => {
   const { t } = useI18n();
@@ -17,6 +18,7 @@ export const App: React.FC = () => {
   const [user, setUser] = useState<any>(null);
   const [person, setPerson] = useState<any>(null);
   const [family, setFamily] = useState<any>(null);
+  const [showProfileModal, setShowProfileModal] = useState(false);
 
   // Path & Navigation state
   const [isAdminLoginMode, setIsAdminLoginMode] = useState<boolean>(
@@ -149,6 +151,7 @@ export const App: React.FC = () => {
           setActiveNav('dashboard');
           window.history.pushState({}, '', '/');
         }}
+        onLogout={handleLogout}
       />
     );
   }
@@ -172,6 +175,7 @@ export const App: React.FC = () => {
         }}
         onSelectTrip={(id) => setSelectedTripId(id)}
         onLogout={handleLogout}
+        onOpenProfile={() => setShowProfileModal(true)}
       />
 
       <main style={{ flex: 1 }}>
@@ -194,6 +198,13 @@ export const App: React.FC = () => {
           />
         )}
       </main>
+
+      {showProfileModal && (
+        <ProfileModal
+          onClose={() => setShowProfileModal(false)}
+          onProfileUpdated={checkAuthStatus}
+        />
+      )}
     </div>
   );
 };

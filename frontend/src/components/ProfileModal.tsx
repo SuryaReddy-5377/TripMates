@@ -124,19 +124,36 @@ export const ProfileModal: React.FC<Props> = ({ onClose, onProfileUpdated }) => 
   };
 
   return (
-    <div className="modal-overlay" style={{ zIndex: 1200 }}>
+    <div
+      className="modal-overlay"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 9999,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '1.5rem',
+        background: 'rgba(15, 23, 42, 0.65)',
+        backdropFilter: 'blur(8px)',
+        overflowY: 'auto',
+      }}
+      onClick={onClose}
+    >
       <div
         className="card-white"
+        onClick={e => e.stopPropagation()}
         style={{
           width: '100%',
           maxWidth: '560px',
-          maxHeight: '90vh',
+          maxHeight: '85vh',
           overflowY: 'auto',
           borderRadius: '20px',
           padding: '2rem',
+          margin: 'auto',
           position: 'relative',
           background: '#ffffff',
-          boxShadow: '0 20px 40px rgba(0,0,0,0.12)',
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
         }}
       >
         {/* Header */}
