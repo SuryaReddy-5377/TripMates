@@ -12,7 +12,7 @@ async function startServer() {
   const app = createApp();
 
   app.listen(config.port, '0.0.0.0', () => {
-    console.log(`TripMates server running on http://localhost:${config.port} and http://127.0.0.1:${config.port}`);
+    console.log(`TripMates server running on port ${config.port} bound to 0.0.0.0 (http://0.0.0.0:${config.port})`);
   });
 }
 

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useI18n } from '../i18n/context';
+import { Translations } from '../i18n/translations';
 import { api } from '../api/client';
 import {
   Users,
@@ -34,13 +35,13 @@ interface Props {
   onCancel: () => void;
 }
 
-const CATEGORIES = [
-  { id: 'Food', label: 'Food & Dining', icon: '🍽️' },
-  { id: 'Transport', label: 'Transport', icon: '🚕' },
-  { id: 'Stay', label: 'Stay & Hotels', icon: '🏨' },
-  { id: 'Activities', label: 'Activities', icon: '🎯' },
-  { id: 'Shopping', label: 'Shopping', icon: '🛍️' },
-  { id: 'General', label: 'General', icon: '📦' },
+const CATEGORIES: Array<{ id: string; labelKey: keyof Translations; icon: string }> = [
+  { id: 'Food', labelKey: 'catFood', icon: '🍽️' },
+  { id: 'Transport', labelKey: 'catTransport', icon: '🚕' },
+  { id: 'Stay', labelKey: 'catStay', icon: '🏨' },
+  { id: 'Activities', labelKey: 'catActivities', icon: '🎯' },
+  { id: 'Shopping', labelKey: 'catShopping', icon: '🛍️' },
+  { id: 'General', labelKey: 'catGeneral', icon: '📦' },
 ];
 
 export const ExpenseSplitWizard: React.FC<Props> = ({
@@ -270,13 +271,13 @@ export const ExpenseSplitWizard: React.FC<Props> = ({
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', color: '#64748b', fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-            <CreditCard size={15} /> Expense Engine
+            <CreditCard size={15} /> {t.expenseEngine}
           </div>
           <h2 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#0f172a', margin: '0.2rem 0 0 0', fontFamily: 'var(--font-display)' }}>
-            Add Expense
+            {t.addExpense}
           </h2>
           <p style={{ margin: '0.15rem 0 0 0', fontSize: '0.82rem', color: '#64748b' }}>
-            Record a shared expense and split it fairly among trip members.
+            {t.expenseEngineSubtitle}
           </p>
         </div>
         <button
@@ -316,7 +317,7 @@ export const ExpenseSplitWizard: React.FC<Props> = ({
           textAlign: 'center',
         }}>
           <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.35rem' }}>
-            Total Expense Amount
+            {t.totalExpenseAmount}
           </label>
           <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}>
             <span style={{ fontSize: '2rem', fontWeight: 800, color: '#0f172a' }}>₹</span>
@@ -348,21 +349,21 @@ export const ExpenseSplitWizard: React.FC<Props> = ({
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' }}>
           <div>
             <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#0f172a', marginBottom: '0.35rem' }}>
-              Expense Title *
+              {t.expenseTitle} *
             </label>
             <input
               type="text"
               className="form-input"
               value={title}
               onChange={e => setTitle(e.target.value)}
-              placeholder="e.g. Dinner at Old Manali, River Rafting"
+              placeholder={t.expenseTitlePlaceholder}
               required
             />
           </div>
 
           <div>
             <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#0f172a', marginBottom: '0.35rem' }}>
-              Date
+              {t.expenseDate}
             </label>
             <input
               type="date"
@@ -377,7 +378,7 @@ export const ExpenseSplitWizard: React.FC<Props> = ({
         {/* WHO PAID */}
         <div>
           <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#0f172a', marginBottom: '0.35rem' }}>
-            Who Paid the Bill?
+            {t.whoPaidTheBill}
           </label>
           <select
             className="form-select"
@@ -388,7 +389,7 @@ export const ExpenseSplitWizard: React.FC<Props> = ({
               setPayerId(Number(id));
             }}
           >
-            <optgroup label="Members">
+            <optgroup label={t.membersGroup}>
               {participants.map(p => (
                 <option key={`p:${p.id}`} value={`p:${p.id}`}>
                   {p.display_name} {p.family_name ? `(${p.family_name})` : ''}
@@ -396,10 +397,10 @@ export const ExpenseSplitWizard: React.FC<Props> = ({
               ))}
             </optgroup>
             {families.length > 0 && (
-              <optgroup label="Families">
+              <optgroup label={t.familiesGroup}>
                 {families.map(f => (
                   <option key={`f:${f.id}`} value={`f:${f.id}`}>
-                    {f.name} (Family Account)
+                    {f.name} ({t.familyAccount})
                   </option>
                 ))}
               </optgroup>
@@ -410,7 +411,7 @@ export const ExpenseSplitWizard: React.FC<Props> = ({
         {/* CATEGORY SELECTOR */}
         <div>
           <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#0f172a', marginBottom: '0.4rem' }}>
-            Category
+            {t.category}
           </label>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem' }}>
             {CATEGORIES.map(cat => (
@@ -434,7 +435,7 @@ export const ExpenseSplitWizard: React.FC<Props> = ({
                 }}
               >
                 <span>{cat.icon}</span>
-                <span>{cat.label}</span>
+                <span>{t[cat.labelKey] || cat.id}</span>
               </button>
             ))}
           </div>
@@ -443,13 +444,13 @@ export const ExpenseSplitWizard: React.FC<Props> = ({
         {/* SPLIT METHOD TABS */}
         <div>
           <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#0f172a', marginBottom: '0.4rem' }}>
-            Split Method
+            {t.splitMethod}
           </label>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
             {[
-              { id: 'equal', label: 'Equal Split' },
-              { id: 'individual_remainder', label: 'Individual + Remainder' },
-              { id: 'custom', label: 'Custom Amounts' },
+              { id: 'equal', label: t.equalSplit },
+              { id: 'individual_remainder', label: t.individualRemainderSplit },
+              { id: 'custom', label: t.customSplit },
             ].map(m => (
               <button
                 key={m.id}
@@ -488,7 +489,7 @@ export const ExpenseSplitWizard: React.FC<Props> = ({
                 gap: '0.25rem',
               }}
             >
-              <span>More Options</span>
+              <span>{t.moreOptions}</span>
               <ChevronDown size={14} />
             </button>
           </div>
@@ -496,9 +497,9 @@ export const ExpenseSplitWizard: React.FC<Props> = ({
           {showMoreOptions && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginTop: '0.5rem', padding: '0.65rem', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
               {[
-                { id: 'percentage', label: 'Percentage %' },
-                { id: 'per_head', label: 'Per-Head Count' },
-                { id: 'family_wise', label: 'Family-Wise Split' },
+                { id: 'percentage', label: t.percentageSplit },
+                { id: 'per_head', label: t.perHeadSplit },
+                { id: 'family_wise', label: t.familyWiseSplit },
               ].map(m => (
                 <button
                   key={m.id}
@@ -540,11 +541,11 @@ export const ExpenseSplitWizard: React.FC<Props> = ({
             gap: '0.5rem',
           }}>
             <div>
-              <span style={{ color: '#64748b' }}>Custom Items: </span>
+              <span style={{ color: '#64748b' }}>{t.customItems}: </span>
               <strong style={{ color: isIndividualTotalOver ? '#dc2626' : '#0f172a' }}>{formatINR(individualTotalPaise)}</strong>
             </div>
             <div>
-              <span style={{ color: '#64748b' }}>Remaining to Share: </span>
+              <span style={{ color: '#64748b' }}>{t.remainingToShare}: </span>
               <strong style={{ color: sharedRemainderPaise < 0 ? '#dc2626' : '#059669' }}>
                 {sharedRemainderPaise < 0 ? `Over by ${formatINR(Math.abs(sharedRemainderPaise))}` : formatINR(sharedRemainderPaise)}
               </strong>
@@ -563,10 +564,10 @@ export const ExpenseSplitWizard: React.FC<Props> = ({
         <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '1.25rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
             <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#0f172a' }}>
-              Split Between ({selectedKeys.length} of {participants.length} selected)
+              {t.participatingMembers} ({selectedKeys.length} / {participants.length})
               {splitMethod === 'equal' && selectedKeys.length > 0 && totalPaise > 0 && (
                 <span style={{ color: '#059669', fontWeight: 600, marginLeft: '0.4rem' }}>
-                  (≈ {formatINR(equalSharePaise)} each)
+                  (≈ {formatINR(equalSharePaise)})
                 </span>
               )}
             </span>
@@ -577,7 +578,7 @@ export const ExpenseSplitWizard: React.FC<Props> = ({
                 className="btn btn-secondary btn-sm"
                 style={{ fontSize: '0.74rem', padding: '0.2rem 0.55rem' }}
               >
-                Select All
+                {t.selectAll}
               </button>
               <button
                 type="button"
@@ -585,7 +586,7 @@ export const ExpenseSplitWizard: React.FC<Props> = ({
                 className="btn btn-secondary btn-sm"
                 style={{ fontSize: '0.74rem', padding: '0.2rem 0.55rem', color: '#dc2626' }}
               >
-                Clear
+                {t.selectNone}
               </button>
             </div>
           </div>
@@ -663,10 +664,10 @@ export const ExpenseSplitWizard: React.FC<Props> = ({
                       onClick={e => e.stopPropagation()}
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.2rem' }}>
-                        <span style={{ fontSize: '0.7rem', color: '#64748b' }}>Individual portion:</span>
+                        <span style={{ fontSize: '0.7rem', color: '#64748b' }}>{t.individualPortion}:</span>
                         {finalAmount > 0 && (
                           <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#059669' }}>
-                            Total: {formatINR(finalAmount)}
+                            {formatINR(finalAmount)}
                           </span>
                         )}
                       </div>
@@ -729,7 +730,7 @@ export const ExpenseSplitWizard: React.FC<Props> = ({
             className="btn btn-primary"
             style={{ minWidth: '180px', justifyContent: 'center' }}
           >
-            {isSubmitting ? 'Saving Expense...' : `Save Expense (${totalPaise > 0 ? formatINR(totalPaise) : '₹0'})`}
+            {isSubmitting ? t.savingExpense : `${t.saveExpenseBtn} (${totalPaise > 0 ? formatINR(totalPaise) : '₹0'})`}
           </button>
         </div>
       </form>

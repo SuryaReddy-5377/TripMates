@@ -89,8 +89,8 @@ export const Dashboard: React.FC<Props> = ({
       {/* Welcome Banner matching Lovable theme */}
       <div style={{ marginTop: '1.5rem', marginBottom: '1.75rem' }}>
         <PineForestBanner
-          title={`Namaste, ${person?.display_name || user.email.split('@')[0]}!`}
-          subtitle={family ? `Belonging to ${family.name} · Every trip, every photo, every rupee — together.` : 'Every trip, every photo, every rupee — together.'}
+          title={`${t.namaste}, ${person?.display_name || user.email.split('@')[0]}!`}
+          subtitle={family ? `${family.name} · ${t.everyTripEveryPhoto}` : t.everyTripEveryPhoto}
           height={180}
           bgImage="/images/photo-family-beach.jpg"
         />
@@ -127,7 +127,7 @@ export const Dashboard: React.FC<Props> = ({
             </div>
             <div>
               <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#0f172a' }}>{t.createTrip}</h3>
-              <p style={{ color: '#64748b', fontSize: '0.82rem' }}>Plan a new trip with family and friends</p>
+              <p style={{ color: '#64748b', fontSize: '0.82rem' }}>{t.planNewTripSubtitle}</p>
             </div>
           </div>
           <ArrowRight size={18} style={{ color: '#0f172a' }} />
@@ -140,7 +140,7 @@ export const Dashboard: React.FC<Props> = ({
               <input
                 type="text"
                 className="form-input"
-                placeholder="Enter Invite Code (e.g. TRIP-789A)"
+                placeholder={t.enterInviteCodePlaceholder}
                 value={inviteCode}
                 onChange={e => setInviteCode(e.target.value)}
                 style={{ padding: '0.65rem 0.85rem', fontSize: '0.88rem' }}
@@ -152,7 +152,7 @@ export const Dashboard: React.FC<Props> = ({
               className="btn btn-primary"
               style={{ whiteSpace: 'nowrap', padding: '0.65rem 1.1rem' }}
             >
-              <KeyRound size={16} /> Join
+              <KeyRound size={16} /> {t.joinBtn}
             </button>
           </form>
           {joinMsg && (
@@ -194,10 +194,10 @@ export const Dashboard: React.FC<Props> = ({
             marginBottom: '0.5rem',
             color: '#0f172a',
           }}>
-            No trips planned yet
+            {t.noTripsYet}
           </h3>
           <p style={{ color: '#64748b', marginBottom: '1.5rem', maxWidth: '400px', margin: '0 auto 1.5rem', fontSize: '0.92rem' }}>
-            Get started by creating your family's first trip or join an existing trip using an invitation code!
+            {t.noTripsDesc}
           </p>
           <button type="button" onClick={() => setShowCreateModal(true)} className="btn btn-primary">
             <Plus size={16} /> {t.createTrip}
@@ -239,7 +239,7 @@ export const Dashboard: React.FC<Props> = ({
                   </span>
                   {trip.is_private === 1 && (
                     <span className="badge badge-amber" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                      <Lock size={12} /> Private
+                      <Lock size={12} /> {t.privateBadge}
                     </span>
                   )}
                 </div>
@@ -262,13 +262,13 @@ export const Dashboard: React.FC<Props> = ({
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', color: '#0f172a', fontSize: '0.92rem', fontWeight: 600 }}>
                     <MapPin size={16} style={{ color: '#f59e0b', flexShrink: 0 }} />
-                    <span>{trip.destination || 'Unspecified location'}</span>
+                    <span>{trip.destination || t.unspecifiedLocation}</span>
                   </div>
 
                   {(trip.start_date || trip.end_date) && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', color: '#64748b', fontSize: '0.82rem' }}>
                       <Calendar size={15} style={{ flexShrink: 0 }} />
-                      <span>{trip.start_date || ''} {trip.end_date ? 'to ' + trip.end_date : ''}</span>
+                      <span>{trip.start_date || ''} {trip.end_date ? ` ${t.toWord} ` + trip.end_date : ''}</span>
                     </div>
                   )}
                 </div>
@@ -276,7 +276,7 @@ export const Dashboard: React.FC<Props> = ({
                 {/* Card Footer */}
                 <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ fontSize: '0.82rem', color: '#64748b' }}>
-                    {trip.expense_count} expenses · <strong style={{ color: '#0f172a' }}>{formatINR(trip.total_spent_paise)}</strong>
+                    {trip.expense_count} {t.expenses} · <strong style={{ color: '#0f172a' }}>{formatINR(trip.total_spent_paise)}</strong>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: '#0f172a', fontSize: '0.85rem', fontWeight: 700 }}>
                     {t.viewDetails} →

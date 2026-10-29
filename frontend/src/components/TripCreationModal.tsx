@@ -219,13 +219,13 @@ export const TripCreationModal: React.FC<Props> = ({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
           <div>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', color: '#f59e0b', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem' }}>
-              <Compass size={16} /> New Adventure
+              <Compass size={16} /> {t.newAdventure}
             </div>
             <h2 style={{ fontSize: '1.75rem', fontWeight: 700, color: '#0f172a', fontFamily: 'var(--font-display)', margin: 0, letterSpacing: '-0.02em' }}>
-              Plan a New Trip
+              {t.planNewTrip}
             </h2>
             <p style={{ color: '#64748b', fontSize: '0.88rem', margin: '0.25rem 0 0 0' }}>
-              Set destination, travel dates, custom cover photo, and invite family members.
+              {t.planNewTripDesc}
             </p>
           </div>
           <button
@@ -300,7 +300,7 @@ export const TripCreationModal: React.FC<Props> = ({
           {/* Dates & Budget */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
             <div className="form-group" style={{ margin: 0 }}>
-              <label className="form-label" style={{ fontWeight: 700 }}>Start Date</label>
+              <label className="form-label" style={{ fontWeight: 700 }}>{t.startDate}</label>
               <input
                 type="date"
                 className="form-input"
@@ -310,7 +310,7 @@ export const TripCreationModal: React.FC<Props> = ({
             </div>
 
             <div className="form-group" style={{ margin: 0 }}>
-              <label className="form-label" style={{ fontWeight: 700 }}>End Date</label>
+              <label className="form-label" style={{ fontWeight: 700 }}>{t.endDate}</label>
               <input
                 type="date"
                 className="form-input"
@@ -346,9 +346,9 @@ export const TripCreationModal: React.FC<Props> = ({
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem' }}>
               <label className="form-label" style={{ margin: 0, fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                <ImageIcon size={16} color="#0f172a" /> Trip Main Cover Image
+                <ImageIcon size={16} color="#0f172a" /> {t.tripMainCoverImage}
               </label>
-              <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Customizable by Trip Creator & Admin</span>
+              <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{t.customizableByCreator}</span>
             </div>
 
             {/* Live Preview Banner */}
@@ -380,14 +380,14 @@ export const TripCreationModal: React.FC<Props> = ({
                 fontWeight: 600,
                 backdropFilter: 'blur(4px)',
               }}>
-                Current Cover Preview
+                {t.currentCoverPreview}
               </div>
             </div>
 
             {/* Presets */}
             <div style={{ marginBottom: '0.75rem' }}>
               <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '0.35rem' }}>
-                Choose from Travel Presets:
+                {t.chooseTravelPresets}
               </span>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
                 {PRESET_IMAGES.map(img => (
@@ -416,7 +416,7 @@ export const TripCreationModal: React.FC<Props> = ({
             {/* Custom URL Input */}
             <div>
               <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '0.3rem' }}>
-                Or Enter Custom Image URL:
+                {t.enterCustomImageUrl}
               </span>
               <input
                 type="url"
@@ -431,11 +431,11 @@ export const TripCreationModal: React.FC<Props> = ({
 
           {/* Description */}
           <div className="form-group" style={{ margin: 0 }}>
-            <label className="form-label" style={{ fontWeight: 700 }}>Description & Highlights</label>
+            <label className="form-label" style={{ fontWeight: 700 }}>{t.descriptionAndHighlights}</label>
             <textarea
               className="form-textarea"
               rows={2}
-              placeholder="What makes this trip special? Itinerary highlights, planned spots..."
+              placeholder={t.descriptionPlaceholder}
               value={description}
               onChange={e => setDescription(e.target.value)}
             />
@@ -452,10 +452,10 @@ export const TripCreationModal: React.FC<Props> = ({
               <div>
                 <label className="form-label" style={{ margin: 0, fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.98rem' }}>
                   <Users size={18} color="#0f172a" />
-                  Invite Members ({selectedPersonIds.length} selected)
+                  {t.inviteMembers} ({selectedPersonIds.length} {t.confirm})
                 </label>
                 <p style={{ margin: '0.15rem 0 0 0', fontSize: '0.78rem', color: '#64748b' }}>
-                  Invite any family member or logged-in user on the platform to join this trip.
+                  {t.inviteMembersDesc}
                 </p>
               </div>
 
@@ -466,7 +466,7 @@ export const TripCreationModal: React.FC<Props> = ({
                   className="btn btn-secondary btn-sm"
                   style={{ fontSize: '0.76rem', padding: '0.25rem 0.65rem' }}
                 >
-                  Select All
+                  {t.selectAll}
                 </button>
                 <button
                   type="button"
@@ -474,7 +474,7 @@ export const TripCreationModal: React.FC<Props> = ({
                   className="btn btn-secondary btn-sm"
                   style={{ fontSize: '0.76rem', padding: '0.25rem 0.65rem', color: '#dc2626' }}
                 >
-                  Clear
+                  {t.selectNone}
                 </button>
               </div>
             </div>
@@ -484,7 +484,7 @@ export const TripCreationModal: React.FC<Props> = ({
               <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
               <input
                 type="text"
-                placeholder="Search registered members by name or email..."
+                placeholder={t.searchMembersPlaceholder}
                 value={memberSearch}
                 onChange={e => setMemberSearch(e.target.value)}
                 style={{
@@ -548,7 +548,7 @@ export const TripCreationModal: React.FC<Props> = ({
                           cursor: 'pointer',
                         }}
                       >
-                        {allSelected ? 'Deselect Family' : 'Invite Entire Family'}
+                        {allSelected ? t.deselectFamily : t.inviteEntireFamily}
                       </button>
                     </div>
 
@@ -629,7 +629,7 @@ export const TripCreationModal: React.FC<Props> = ({
               {groupedPersons.individuals.length > 0 && (
                 <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '0.85rem' }}>
                   <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#0f172a', marginBottom: '0.65rem', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.5rem' }}>
-                    Individual Members ({groupedPersons.individuals.length})
+                    {t.individualMembers} ({groupedPersons.individuals.length})
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.5rem' }}>
                     {groupedPersons.individuals.map(p => {
@@ -725,7 +725,7 @@ export const TripCreationModal: React.FC<Props> = ({
                 {t.privateTrip}
               </label>
               <p style={{ fontSize: '0.78rem', color: '#64748b', margin: '0.2rem 0 0 0' }}>
-                When marked completed, only attendees who confirmed attendance or trip administrators can view photos and financials.
+                {t.privateTripNote}
               </p>
             </div>
           </div>
@@ -749,7 +749,7 @@ export const TripCreationModal: React.FC<Props> = ({
               }}
             >
               <Sparkles size={16} />
-              {isSubmitting ? t.loading : 'Create Trip & Invite Members'}
+              {isSubmitting ? t.loading : t.createTripAndInvite}
             </button>
           </div>
         </form>

@@ -190,13 +190,13 @@ export const TripEditModal: React.FC<Props> = ({ trip, onClose, onTripUpdated })
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#64748b', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-              <Sparkles size={15} /> Trip Settings & Members
+              <Sparkles size={15} /> {t.editTripDetails}
             </div>
             <h2 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#0f172a', margin: '0.2rem 0 0 0', fontFamily: 'var(--font-display)' }}>
-              Edit Trip Details
+              {t.editTripDetails}
             </h2>
             <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.85rem', color: '#64748b' }}>
-              Update trip destinations, dates, and invite missed family members or friends.
+              {t.editTripDesc}
             </p>
           </div>
           <button
@@ -220,7 +220,7 @@ export const TripEditModal: React.FC<Props> = ({ trip, onClose, onTripUpdated })
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem' }}>
             <div>
               <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#0f172a', marginBottom: '0.35rem' }}>
-                Trip Name *
+                {t.tripName} *
               </label>
               <input
                 type="text"
@@ -234,7 +234,7 @@ export const TripEditModal: React.FC<Props> = ({ trip, onClose, onTripUpdated })
 
             <div>
               <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#0f172a', marginBottom: '0.35rem' }}>
-                Destination
+                {t.destination}
               </label>
               <div style={{ position: 'relative' }}>
                 <MapPin size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
@@ -254,7 +254,7 @@ export const TripEditModal: React.FC<Props> = ({ trip, onClose, onTripUpdated })
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
             <div>
               <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#0f172a', marginBottom: '0.35rem' }}>
-                Start Date
+                {t.startDate}
               </label>
               <input
                 type="date"
@@ -266,7 +266,7 @@ export const TripEditModal: React.FC<Props> = ({ trip, onClose, onTripUpdated })
 
             <div>
               <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#0f172a', marginBottom: '0.35rem' }}>
-                End Date
+                {t.endDate}
               </label>
               <input
                 type="date"
@@ -278,7 +278,7 @@ export const TripEditModal: React.FC<Props> = ({ trip, onClose, onTripUpdated })
 
             <div>
               <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#0f172a', marginBottom: '0.35rem' }}>
-                Total Budget (₹)
+                {t.budget} (₹)
               </label>
               <div style={{ position: 'relative' }}>
                 <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', fontWeight: 700, color: '#94a3b8' }}>₹</span>
@@ -299,7 +299,7 @@ export const TripEditModal: React.FC<Props> = ({ trip, onClose, onTripUpdated })
           {/* Cover Photo */}
           <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '1rem' }}>
             <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#0f172a', marginBottom: '0.5rem' }}>
-              Cover Photo
+              {t.tripMainCoverImage}
             </label>
             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
               {PRESET_IMAGES.map(img => (
@@ -324,7 +324,7 @@ export const TripEditModal: React.FC<Props> = ({ trip, onClose, onTripUpdated })
             </div>
             <input
               type="url"
-              placeholder="Or custom photo URL (https://...)"
+              placeholder={t.enterCustomImageUrl}
               value={customImageUrl}
               onChange={e => {
                 setCustomImageUrl(e.target.value);
@@ -338,14 +338,14 @@ export const TripEditModal: React.FC<Props> = ({ trip, onClose, onTripUpdated })
           {/* Description / Notes */}
           <div>
             <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#0f172a', marginBottom: '0.35rem' }}>
-              Highlights & Notes
+              {t.descriptionAndHighlights}
             </label>
             <textarea
               rows={2}
               value={description}
               onChange={e => setDescription(e.target.value)}
               className="form-textarea"
-              placeholder="Planned activities, packing reminders, stay notes..."
+              placeholder={t.descriptionPlaceholder}
             />
           </div>
 
@@ -355,15 +355,15 @@ export const TripEditModal: React.FC<Props> = ({ trip, onClose, onTripUpdated })
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.98rem', fontWeight: 700, color: '#0f172a' }}>
                   <Users size={18} color="#0f172a" />
-                  Trip Participants ({selectedPersonIds.length} Selected)
+                  {t.tripMembers} ({selectedPersonIds.length} {t.confirm})
                 </div>
                 <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
                   {newlyInvitedCount > 0 ? (
                     <span style={{ color: '#059669', fontWeight: 600 }}>
-                      + {newlyInvitedCount} newly selected member{newlyInvitedCount > 1 ? 's' : ''} will receive an invitation!
+                      + {newlyInvitedCount} {t.newAdventure}
                     </span>
                   ) : (
-                    'Select individuals or entire families to join the trip and split expenses.'
+                    t.inviteMembersDesc
                   )}
                 </div>
               </div>
@@ -375,7 +375,7 @@ export const TripEditModal: React.FC<Props> = ({ trip, onClose, onTripUpdated })
                   className="btn btn-secondary btn-sm"
                   style={{ fontSize: '0.74rem', padding: '0.25rem 0.65rem' }}
                 >
-                  Select All
+                  {t.selectAll}
                 </button>
                 <button
                   type="button"
@@ -383,7 +383,7 @@ export const TripEditModal: React.FC<Props> = ({ trip, onClose, onTripUpdated })
                   className="btn btn-secondary btn-sm"
                   style={{ fontSize: '0.74rem', padding: '0.25rem 0.65rem', color: '#dc2626' }}
                 >
-                  Clear
+                  {t.selectNone}
                 </button>
               </div>
             </div>
@@ -393,7 +393,7 @@ export const TripEditModal: React.FC<Props> = ({ trip, onClose, onTripUpdated })
               <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
               <input
                 type="text"
-                placeholder="Search by name, email, or family..."
+                placeholder={t.searchMembersPlaceholder}
                 value={memberSearch}
                 onChange={e => setMemberSearch(e.target.value)}
                 style={{
@@ -450,7 +450,7 @@ export const TripEditModal: React.FC<Props> = ({ trip, onClose, onTripUpdated })
                           cursor: 'pointer',
                         }}
                       >
-                        {allSelected ? 'Deselect Family' : 'Invite Entire Family'}
+                        {allSelected ? t.deselectFamily : t.inviteEntireFamily}
                       </button>
                     </div>
 
@@ -614,7 +614,7 @@ export const TripEditModal: React.FC<Props> = ({ trip, onClose, onTripUpdated })
               disabled={submitting || !name.trim()}
               className="btn btn-primary"
             >
-              {submitting ? 'Saving Changes...' : 'Save & Send Invitations'}
+              {submitting ? t.savingTrip : t.saveTripChanges}
             </button>
           </div>
         </form>

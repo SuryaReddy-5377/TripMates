@@ -160,10 +160,10 @@ export const ProfileModal: React.FC<Props> = ({ onClose, onProfileUpdated }) => 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#64748b', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-              <User size={15} /> Your Account & Family
+              <User size={15} /> {t.yourAccountAndFamily}
             </div>
             <h2 style={{ fontSize: '1.45rem', fontWeight: 700, color: '#0f172a', margin: '0.2rem 0 0 0', fontFamily: 'var(--font-display)' }}>
-              Member Profile
+              {t.memberProfile}
             </h2>
           </div>
           <button
@@ -232,10 +232,10 @@ export const ProfileModal: React.FC<Props> = ({ onClose, onProfileUpdated }) => 
                   <HeartHandshake size={20} style={{ color: '#0f172a' }} />
                   <div>
                     <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
-                      {profile.family ? profile.family.name : 'Your Family Group'}
+                      {profile.family ? profile.family.name : t.yourFamilyGroup}
                     </h3>
                     <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
-                      {profile.familyMembers?.length ? `Family of ${profile.familyMembers.length}` : 'Manage your family members'}
+                      {profile.familyMembers?.length ? `${t.familyOfCount} ${profile.familyMembers.length}` : t.manageFamilyMembers}
                     </div>
                   </div>
                 </div>
@@ -246,7 +246,7 @@ export const ProfileModal: React.FC<Props> = ({ onClose, onProfileUpdated }) => 
                   className="btn btn-secondary btn-sm"
                   style={{ fontSize: '0.78rem', padding: '0.35rem 0.65rem' }}
                 >
-                  <Edit2 size={13} /> {isEditingFamilyName ? 'Cancel' : 'Rename'}
+                  <Edit2 size={13} /> {isEditingFamilyName ? t.cancel : t.rename}
                 </button>
               </div>
 
@@ -263,7 +263,7 @@ export const ProfileModal: React.FC<Props> = ({ onClose, onProfileUpdated }) => 
                     required
                   />
                   <button type="submit" disabled={savingFamily} className="btn btn-primary btn-sm">
-                    {savingFamily ? 'Saving...' : 'Save'}
+                    {savingFamily ? t.loading : t.save}
                   </button>
                 </form>
               )}
@@ -300,7 +300,7 @@ export const ProfileModal: React.FC<Props> = ({ onClose, onProfileUpdated }) => 
                       </div>
                       <div>
                         <div style={{ fontSize: '0.88rem', fontWeight: 600, color: '#0f172a' }}>
-                          {m.display_name} {m.is_current_user && <span style={{ fontSize: '0.72rem', color: '#15803d', fontWeight: 700 }}>(You)</span>}
+                          {m.display_name} {m.is_current_user && <span style={{ fontSize: '0.72rem', color: '#15803d', fontWeight: 700 }}>({t.you})</span>}
                         </div>
                         {m.email && <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{m.email}</div>}
                       </div>
@@ -308,7 +308,7 @@ export const ProfileModal: React.FC<Props> = ({ onClose, onProfileUpdated }) => 
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                       {m.is_family_admin === 1 && (
-                        <span className="badge badge-amber" style={{ fontSize: '0.68rem' }}>Admin</span>
+                        <span className="badge badge-amber" style={{ fontSize: '0.68rem' }}>{t.adminBadge}</span>
                       )}
                       {!m.is_current_user && (
                         <button
@@ -316,7 +316,7 @@ export const ProfileModal: React.FC<Props> = ({ onClose, onProfileUpdated }) => 
                           onClick={() => handleRemoveMember(m.id, m.display_name)}
                           className="btn btn-danger btn-sm"
                           style={{ padding: '0.25rem 0.45rem', fontSize: '0.7rem' }}
-                          title="Remove from family"
+                          title={t.delete}
                         >
                           <Trash2 size={13} />
                         </button>
@@ -334,7 +334,7 @@ export const ProfileModal: React.FC<Props> = ({ onClose, onProfileUpdated }) => 
                   className="btn btn-secondary btn-sm"
                   style={{ width: '100%', justifyContent: 'center', padding: '0.55rem', fontSize: '0.82rem' }}
                 >
-                  <Plus size={15} /> Add Family Member (Spouse, Child, etc.)
+                  <Plus size={15} /> {t.addFamilyMemberBtn}
                 </button>
               ) : (
                 <form
@@ -350,15 +350,15 @@ export const ProfileModal: React.FC<Props> = ({ onClose, onProfileUpdated }) => 
                   }}
                 >
                   <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#0f172a' }}>
-                    Add Member to Your Family
+                    {t.addMemberToFamily}
                   </div>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#475569', marginBottom: '0.25rem' }}>
-                      Name *
+                      {t.nameLabel} *
                     </label>
                     <input
                       type="text"
-                      placeholder="e.g. Priya Reddy, Aarav Reddy"
+                      placeholder={t.namePlaceholder}
                       value={memberName}
                       onChange={(e) => setMemberName(e.target.value)}
                       className="form-input"
@@ -369,7 +369,7 @@ export const ProfileModal: React.FC<Props> = ({ onClose, onProfileUpdated }) => 
 
                   <div>
                     <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#475569', marginBottom: '0.25rem' }}>
-                      Email (Optional, for separate login)
+                      {t.emailOptional}
                     </label>
                     <input
                       type="email"
@@ -384,11 +384,11 @@ export const ProfileModal: React.FC<Props> = ({ onClose, onProfileUpdated }) => 
                   {memberEmail && (
                     <div>
                       <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#475569', marginBottom: '0.25rem' }}>
-                        Password *
+                        {t.password} *
                       </label>
                       <input
                         type="password"
-                        placeholder="Create a password"
+                        placeholder={t.createPasswordPlaceholder}
                         value={memberPassword}
                         onChange={(e) => setMemberPassword(e.target.value)}
                         className="form-input"
@@ -411,7 +411,7 @@ export const ProfileModal: React.FC<Props> = ({ onClose, onProfileUpdated }) => 
                       disabled={addingMember || !memberName.trim()}
                       className="btn btn-primary btn-sm"
                     >
-                      {addingMember ? 'Adding...' : 'Add Member'}
+                      {addingMember ? t.adding : t.addMember}
                     </button>
                   </div>
                 </form>

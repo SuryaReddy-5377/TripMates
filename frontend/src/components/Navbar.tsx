@@ -123,7 +123,7 @@ export const Navbar: React.FC<Props> = ({
           )}
 
           {/* Notification Center */}
-          <NotificationCenter onSelectTrip={onSelectTrip || (() => {})} />
+          <NotificationCenter onSelectTrip={onSelectTrip || (() => { })} />
 
           {/* Language Switcher */}
           <div style={{

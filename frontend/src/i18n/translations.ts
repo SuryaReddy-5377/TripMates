@@ -241,6 +241,114 @@ export interface Translations {
   finalBreakdown: string;
   remainderSharedEqually: string;
   eachOwes: string;
+  // Extended Expense Wizard
+  expenseEngine: string;
+  expenseEngineSubtitle: string;
+  totalExpenseAmount: string;
+  expenseTitlePlaceholder: string;
+  whoPaidTheBill: string;
+  membersGroup: string;
+  familiesGroup: string;
+  familyAccount: string;
+  moreOptions: string;
+  customItems: string;
+  remainingToShare: string;
+  saveExpenseBtn: string;
+  savingExpense: string;
+  catFood: string;
+  catTransport: string;
+  catStay: string;
+  catActivities: string;
+  catShopping: string;
+  catGeneral: string;
+  // Extended Profile & Family
+  yourAccountAndFamily: string;
+  memberProfile: string;
+  yourFamilyGroup: string;
+  manageFamilyMembers: string;
+  familyOfCount: string;
+  rename: string;
+  addFamilyMemberBtn: string;
+  addMemberToFamily: string;
+  nameLabel: string;
+  namePlaceholder: string;
+  emailOptional: string;
+  createPasswordPlaceholder: string;
+  addMember: string;
+  adding: string;
+  you: string;
+  adminBadge: string;
+  familyGroupUpdated: string;
+  confirmRemoveFamilyMember: string;
+  // Extended Dashboard & Common
+  namaste: string;
+  everyTripEveryPhoto: string;
+  planNewTripSubtitle: string;
+  enterInviteCodePlaceholder: string;
+  joinBtn: string;
+  noTripsYet: string;
+  noTripsDesc: string;
+  privateBadge: string;
+  unspecifiedLocation: string;
+  toWord: string;
+  // Extended Trip Detail
+  backToDashboard: string;
+  changeCoverPhoto: string;
+  editTripAndInvite: string;
+  yourTripExpenseSummary: string;
+  yourTripExpenseDesc: string;
+  totalYouPaid: string;
+  yourShare: string;
+  youGetBack: string;
+  youOwe: string;
+  netStatus: string;
+  settledZero: string;
+  tripMembers: string;
+  mapTab: string;
+  noExpensesYet: string;
+  noExpensesDesc: string;
+  totalTripSpend: string;
+  acrossActiveExpenses: string;
+  youPaidDirectly: string;
+  tripFullySettled: string;
+  unsettledBalancesPending: string;
+  allBalancesReconciled: string;
+  checkSuggestedTransfers: string;
+  youPaidFullBill: string;
+  notInYourSplit: string;
+  othersOweYou: string;
+  pleaseSettle: string;
+  allAccountsEven: string;
+  chooseTravelPresets: string;
+  enterCustomImageUrl: string;
+  // Extended Trip Creation & Edit
+  newAdventure: string;
+  planNewTrip: string;
+  planNewTripDesc: string;
+  startDate: string;
+  endDate: string;
+  tripMainCoverImage: string;
+  customizableByCreator: string;
+  currentCoverPreview: string;
+  descriptionAndHighlights: string;
+  descriptionPlaceholder: string;
+  inviteMembers: string;
+  inviteMembersDesc: string;
+  searchMembersPlaceholder: string;
+  inviteEntireFamily: string;
+  deselectFamily: string;
+  individualMembers: string;
+  privateTripNote: string;
+  createTripAndInvite: string;
+  editTripDetails: string;
+  editTripDesc: string;
+  saveTripChanges: string;
+  savingTrip: string;
+  // Extended Admin Dashboard
+  exitAdmin: string;
+  fullAuthorization: string;
+  superAdminTitle: string;
+  superAdminSubtitle: string;
 }
 
 export const translations: Record<Language, Translations> = {
@@ -477,6 +585,114 @@ export const translations: Record<Language, Translations> = {
     finalBreakdown: 'Final Share Breakdown',
     remainderSharedEqually: 'Equal shared remainder among selected members',
     eachOwes: 'owes',
+    // Extended Expense Wizard
+    expenseEngine: 'Expense Engine',
+    expenseEngineSubtitle: 'Record a shared expense and split it fairly among trip members.',
+    totalExpenseAmount: 'Total Expense Amount',
+    expenseTitlePlaceholder: 'e.g. Dinner at Old Manali, River Rafting',
+    whoPaidTheBill: 'Who Paid the Bill?',
+    membersGroup: 'Members',
+    familiesGroup: 'Families',
+    familyAccount: 'Family Account',
+    moreOptions: 'More Options',
+    customItems: 'Custom Items',
+    remainingToShare: 'Remaining to Share',
+    saveExpenseBtn: 'Save Expense',
+    savingExpense: 'Saving Expense...',
+    catFood: 'Food & Dining',
+    catTransport: 'Transport',
+    catStay: 'Stay & Hotels',
+    catActivities: 'Activities',
+    catShopping: 'Shopping',
+    catGeneral: 'General',
+    // Extended Profile & Family
+    yourAccountAndFamily: 'Your Account & Family',
+    memberProfile: 'Member Profile',
+    yourFamilyGroup: 'Your Family Group',
+    manageFamilyMembers: 'Manage your family members',
+    familyOfCount: 'Family of',
+    rename: 'Rename',
+    addFamilyMemberBtn: 'Add Family Member (Spouse, Child, etc.)',
+    addMemberToFamily: 'Add Member to Your Family',
+    nameLabel: 'Name',
+    namePlaceholder: 'e.g. Priya Reddy, Aarav Reddy',
+    emailOptional: 'Email (Optional, for separate login)',
+    createPasswordPlaceholder: 'Create a password',
+    addMember: 'Add Member',
+    adding: 'Adding...',
+    you: 'You',
+    adminBadge: 'Admin',
+    familyGroupUpdated: 'Family group updated successfully!',
+    confirmRemoveFamilyMember: 'Are you sure you want to remove this member from your family?',
+    // Extended Dashboard & Common
+    namaste: 'Namaste',
+    everyTripEveryPhoto: 'Every trip, every photo, every rupee — together.',
+    planNewTripSubtitle: 'Plan a new trip with family and friends',
+    enterInviteCodePlaceholder: 'Enter Invite Code (e.g. TRIP-789A)',
+    joinBtn: 'Join',
+    noTripsYet: 'No trips planned yet',
+    noTripsDesc: 'Get started by creating your family\'s first trip or join an existing trip using an invitation code!',
+    privateBadge: 'Private',
+    unspecifiedLocation: 'Unspecified location',
+    toWord: 'to',
+    // Extended Trip Detail
+    backToDashboard: 'Back to Dashboard',
+    changeCoverPhoto: 'Change Cover Photo',
+    editTripAndInvite: 'Edit Trip & Invite',
+    yourTripExpenseSummary: 'Your Trip Expense Summary',
+    yourTripExpenseDesc: 'Your personal expenditure & balance since the start of this trip',
+    totalYouPaid: 'Total You Paid',
+    yourShare: 'Your Share',
+    youGetBack: 'You Get Back',
+    youOwe: 'You Owe',
+    netStatus: 'Net Status',
+    settledZero: 'Settled (₹0)',
+    tripMembers: 'Trip Members',
+    mapTab: 'Map',
+    noExpensesYet: 'No expenses recorded yet',
+    noExpensesDesc: 'Record shared group expenses, travel tickets, dining, or stays with customized individual shares and equal remainder splitting.',
+    totalTripSpend: 'Total Trip Spend',
+    acrossActiveExpenses: 'active expenses',
+    youPaidDirectly: 'You paid directly',
+    tripFullySettled: 'Trip is fully settled',
+    unsettledBalancesPending: 'Unsettled balances pending',
+    allBalancesReconciled: 'All participant debits and credits have been reconciled.',
+    checkSuggestedTransfers: 'Check suggested transfers below to settle with minimum transactions.',
+    youPaidFullBill: 'You paid this full bill',
+    notInYourSplit: 'Not in your split',
+    othersOweYou: 'Others owe you money',
+    pleaseSettle: 'Please settle with members',
+    allAccountsEven: 'All accounts even',
+    chooseTravelPresets: 'Choose from Travel Presets:',
+    enterCustomImageUrl: 'Or Enter Custom Image URL:',
+    // Extended Trip Creation & Edit
+    newAdventure: 'New Adventure',
+    planNewTrip: 'Plan a New Trip',
+    planNewTripDesc: 'Set destination, travel dates, custom cover photo, and invite family members.',
+    startDate: 'Start Date',
+    endDate: 'End Date',
+    tripMainCoverImage: 'Trip Main Cover Image',
+    customizableByCreator: 'Customizable by Trip Creator & Admin',
+    currentCoverPreview: 'Current Cover Preview',
+    descriptionAndHighlights: 'Description & Highlights',
+    descriptionPlaceholder: 'What makes this trip special? Itinerary highlights, planned spots...',
+    inviteMembers: 'Invite Members',
+    inviteMembersDesc: 'Invite any family member or logged-in user on the platform to join this trip.',
+    searchMembersPlaceholder: 'Search registered members by name or email...',
+    inviteEntireFamily: 'Invite Entire Family',
+    deselectFamily: 'Deselect Family',
+    individualMembers: 'Individual Members',
+    privateTripNote: 'When marked completed, only attendees who confirmed attendance or trip administrators can view photos and financials.',
+    createTripAndInvite: 'Create Trip & Invite Members',
+    editTripDetails: 'Edit Trip Details',
+    editTripDesc: 'Update trip destinations, dates, and invite missed family members or friends.',
+    saveTripChanges: 'Save Trip Changes',
+    savingTrip: 'Saving...',
+    // Extended Admin Dashboard
+    exitAdmin: 'Exit Admin',
+    fullAuthorization: 'Full Authorization',
+    superAdminTitle: 'TripMates Super Admin',
+    superAdminSubtitle: 'Authenticated Management Dashboard & Audit Inspector',
   },
   te: {
     appName: 'ట్రిప్‌మేట్స్',
@@ -711,5 +927,113 @@ export const translations: Record<Language, Translations> = {
     finalBreakdown: 'తుది వాటాల వివరాలు',
     remainderSharedEqually: 'ఎంచుకున్న సభ్యుల మధ్య సమానంగా పంచుకున్న మిగులు వాటా',
     eachOwes: 'బాకీ మొత్తం',
+    // Extended Expense Wizard
+    expenseEngine: 'ఖర్చుల ఇంజిన్',
+    expenseEngineSubtitle: 'ఉమ్మడి ఖర్చును నమోదు చేసి యాత్ర సభ్యుల మధ్య న్యాయంగా విభజించండి.',
+    totalExpenseAmount: 'మొత్తం ఖర్చు మొత్తం',
+    expenseTitlePlaceholder: 'ఉదా. రాత్రి భోజనం, రివర్ రాఫ్టింగ్, టిక్కెట్లు',
+    whoPaidTheBill: 'బిల్లు ఎవరు చెల్లించారు?',
+    membersGroup: 'సభ్యులు',
+    familiesGroup: 'కుటుంబాలు',
+    familyAccount: 'కుటుంబ ఖాతా',
+    moreOptions: 'మరిన్ని ఎంపికలు',
+    customItems: 'వ్యక్తిగత ఖర్చులు',
+    remainingToShare: 'పంచుకోవాల్సిన మిగులు',
+    saveExpenseBtn: 'ఖర్చును భద్రపరచు',
+    savingExpense: 'భద్రపరుస్తోంది...',
+    catFood: 'ఆహారం & భోజనం',
+    catTransport: 'రవాణా',
+    catStay: 'వసతి & హోటళ్ళు',
+    catActivities: 'కార్యకలాపాలు',
+    catShopping: 'షాపింగ్',
+    catGeneral: 'సాధారణం',
+    // Extended Profile & Family
+    yourAccountAndFamily: 'మీ ఖాతా & కుటుంబం',
+    memberProfile: 'సభ్యుని ప్రొఫైల్',
+    yourFamilyGroup: 'మీ కుటుంబ సమూహం',
+    manageFamilyMembers: 'మీ కుటుంబ సభ్యులను నిర్వహించండి',
+    familyOfCount: 'కుటుంబ సభ్యుల సంఖ్య',
+    rename: 'పేరు మార్చు',
+    addFamilyMemberBtn: 'కుటుంబ సభ్యుడిని చేర్చండి (భార్య/భర్త, పిల్లలు, మొదలైనవి)',
+    addMemberToFamily: 'మీ కుటుంబంలో సభ్యుడిని చేర్చండి',
+    nameLabel: 'పేరు',
+    namePlaceholder: 'ఉదా. ప్రియ రెడ్డి, ఆరవ్ రెడ్డి',
+    emailOptional: 'ఈమెయిల్ (ఐచ్ఛికం, ప్రత్యేక లాగిన్ కోసం)',
+    createPasswordPlaceholder: 'పాస్‌వర్డ్‌ను సృష్టించండి',
+    addMember: 'సభ్యుడిని చేర్చు',
+    adding: 'చేరుస్తోంది...',
+    you: 'మీరు',
+    adminBadge: 'అడ్మిన్',
+    familyGroupUpdated: 'కుటుంబ వివరాలు విజయవంతంగా నవీకరించబడ్డాయి!',
+    confirmRemoveFamilyMember: 'మీరు ఖచ్చితంగా ఈ సభ్యుడిని మీ కుటుంబం నుండి తొలగించాలనుకుంటున్నారా?',
+    // Extended Dashboard & Common
+    namaste: 'నమస్తే',
+    everyTripEveryPhoto: 'ప్రతి ప్రయాణం, ప్రతి ఫోటో, ప్రతి రూపాయి — కలిసికట్టుగా.',
+    planNewTripSubtitle: 'కుటుంబం మరియు స్నేహితులతో కొత్త యాత్రను ప్లాన్ చేయండి',
+    enterInviteCodePlaceholder: 'ఆహ్వాన కోడ్‌ను నమోదు చేయండి (ఉదా. TRIP-789A)',
+    joinBtn: 'చేరండి',
+    noTripsYet: 'ఇంకా ఎటువంటి యాత్రలు ప్లాన్ చేయలేదు',
+    noTripsDesc: 'మీ కుటుంబం మొదటి యాత్రను ప్రారంభించండి లేదా ఆహ్వాన కోడ్‌ని ఉపయోగించి ఇప్పటికే ఉన్న యాత్రలో చేరండి!',
+    privateBadge: 'ప్రైవేట్',
+    unspecifiedLocation: 'గమ్యస్థానం పేర్కొనబడలేదు',
+    toWord: 'నుండి',
+    // Extended Trip Detail
+    backToDashboard: 'డాష్‌బోర్డ్‌కి వెనుకకు',
+    changeCoverPhoto: 'కవర్ ఫోటో మార్చండి',
+    editTripAndInvite: 'యాత్ర సవరణ & ఆహ్వానాలు',
+    yourTripExpenseSummary: 'మీ ప్రయాణ ఖర్చుల సారాంశం',
+    yourTripExpenseDesc: 'ఈ యాత్ర ప్రారంభం నుండి మీ వ్యక్తిగత ఖర్చులు మరియు బ్యాలెన్స్',
+    totalYouPaid: 'మీరు చెల్లించిన మొత్తం',
+    yourShare: 'మీ వాటా',
+    youGetBack: 'మీకు రావాల్సిన మొత్తం',
+    youOwe: 'మీరు ఇవ్వాల్సిన మొత్తం',
+    netStatus: 'నికర స్థితి',
+    settledZero: 'పూర్తయింది (₹0)',
+    tripMembers: 'యాత్ర సభ్యులు',
+    mapTab: 'మ్యాప్',
+    noExpensesYet: 'ఇంకా ఎటువంటి ఖర్చులు నమోదు కాలేదు',
+    noExpensesDesc: 'యాత్ర టిక్కెట్లు, భోజనం లేదా బస ఖర్చులను నమోదు చేసి వ్యక్తిగత మరియు సమాన వాటాలుగా విభజించండి.',
+    totalTripSpend: 'మొత్తం యాత్ర ఖర్చు',
+    acrossActiveExpenses: 'క్రియాశీల ఖర్చులు',
+    youPaidDirectly: 'మీరు నేరుగా చెల్లించారు',
+    tripFullySettled: 'యాత్ర లెక్కలన్నీ పూర్తయ్యాయి',
+    unsettledBalancesPending: 'చెల్లించాల్సిన బ్యాలెన్సులు పెండింగ్‌లో ఉన్నాయి',
+    allBalancesReconciled: 'సభ్యులందరి జమ మరియు ఖర్చులు సరిచేయబడ్డాయి.',
+    checkSuggestedTransfers: 'కనీస లావాదేవీలతో లెక్కలు తేల్చడానికి క్రింది బదిలీలను చూడండి.',
+    youPaidFullBill: 'ఈ పూర్తి బిల్లును మీరే చెల్లించారు',
+    notInYourSplit: 'మీ వాటాలో లేదు',
+    othersOweYou: 'ఇతరులు మీకు డబ్బు ఇవ్వాలి',
+    pleaseSettle: 'సభ్యులకు బాకీ చెల్లించండి',
+    allAccountsEven: 'అన్ని ఖాతాలు సమానంగా ఉన్నాయి',
+    chooseTravelPresets: 'ట్రావెల్ ఫోటోల నుండి ఎంచుకోండి:',
+    enterCustomImageUrl: 'లేదా కస్టమ్ ఫోటో URL నమోదు చేయండి:',
+    // Extended Trip Creation & Edit
+    newAdventure: 'కొత్త ప్రయాణం',
+    planNewTrip: 'కొత్త యాత్రను ప్లాన్ చేయండి',
+    planNewTripDesc: 'గమ్యస్థానం, ప్రయాణ తేదీలు, కవర్ ఫోటో ఎంచుకోండి మరియు కుటుంబ సభ్యులను ఆహ్వానించండి.',
+    startDate: 'ప్రారంభ తేదీ',
+    endDate: 'ముగింపు తేదీ',
+    tripMainCoverImage: 'యాత్ర ప్రధాన కవర్ ఫోటో',
+    customizableByCreator: 'యాత్ర సృష్టికర్త & అడ్మిన్ మార్చవచ్చు',
+    currentCoverPreview: 'ప్రస్తుత కవర్ ప్రివ్యూ',
+    descriptionAndHighlights: 'వివరణ & ముఖ్యాంశాలు',
+    descriptionPlaceholder: 'ఈ యాత్ర ప్రత్యేకత ఏమిటి? సందర్శనీయ స్థలాలు, ప్రణాళిక...',
+    inviteMembers: 'సభ్యులను ఆహ్వానించండి',
+    inviteMembersDesc: 'ఈ యాత్రలో చేరడానికి ఏ కుటుంబ సభ్యుడినైనా లేదా వెబ్‌సైట్‌లోని వినియోగదారుడినైనా ఆహ్వానించండి.',
+    searchMembersPlaceholder: 'పేరు లేదా ఈమెయిల్ ద్వారా సభ్యులను వెతకండి...',
+    inviteEntireFamily: 'మొత్తం కుటుంబాన్ని ఆహ్వానించండి',
+    deselectFamily: 'కుటుంబాన్ని తీసివేయండి',
+    individualMembers: 'వ్యక్తిగత సభ్యులు',
+    privateTripNote: 'యాత్ర పూర్తయినట్లు గుర్తించినప్పుడు, హాజరైనవారు లేదా అడ్మిన్లు మాత్రమే ఫోటోలు మరియు లెక్కలను చూడగలరు.',
+    createTripAndInvite: 'యాత్రను సృష్టించి ఆహ్వానించండి',
+    editTripDetails: 'యాత్ర వివరాలను సవరించండి',
+    editTripDesc: 'గమ్యస్థానాలు, తేదీలను నవీకరించండి మరియు మర్చిపోయిన సభ్యులను ఆహ్వానించండి.',
+    saveTripChanges: 'మార్పులను భద్రపరచు',
+    savingTrip: 'భద్రపరుస్తోంది...',
+    // Extended Admin Dashboard
+    exitAdmin: 'అడ్మిన్ నుండి నిష్క్రమించు',
+    fullAuthorization: 'పూర్తి అనుమతులు',
+    superAdminTitle: 'ట్రిప్‌మేట్స్ సూపర్ అడ్మిన్',
+    superAdminSubtitle: 'నిర్వహణ డాష్‌బోర్డ్ & ఆడిట్ రికార్డులు',
   },
 };

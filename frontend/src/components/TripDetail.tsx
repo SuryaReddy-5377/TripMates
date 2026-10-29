@@ -233,7 +233,7 @@ export const TripDetail: React.FC<Props> = ({
               }}
             >
               <Camera size={15} />
-              <span>Change Cover Photo</span>
+              <span>{t.changeCoverPhoto}</span>
             </button>
           )}
         </div>
@@ -265,7 +265,7 @@ export const TripDetail: React.FC<Props> = ({
               className="btn btn-secondary btn-sm"
               style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
             >
-              <Edit2 size={15} /> Edit Trip & Invite
+              <Edit2 size={15} /> {t.editTripAndInvite}
             </button>
           )}
           {isCreatorOrAdmin && trip.status !== 'completed' && (
@@ -296,24 +296,24 @@ export const TripDetail: React.FC<Props> = ({
         }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', color: '#b45309', fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-              <Wallet size={15} /> Your Trip Expense Summary
+              <Wallet size={15} /> {t.yourTripExpenseSummary}
             </div>
             <h3 style={{ margin: '0.2rem 0 0 0', fontSize: '1.25rem', fontWeight: 700, color: '#0f172a', fontFamily: 'var(--font-display)' }}>
               {currentPerson.display_name}
             </h3>
             <p style={{ margin: '0.15rem 0 0 0', fontSize: '0.82rem', color: '#64748b' }}>
-              Your personal expenditure & balance since the start of this trip
+              {t.yourTripExpenseDesc}
             </p>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
             <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '0.65rem 1.1rem', borderRadius: '12px' }}>
-              <div style={{ fontSize: '0.72rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.03em' }}>Total You Paid</div>
+              <div style={{ fontSize: '0.72rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.03em' }}>{t.totalYouPaid}</div>
               <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', marginTop: '1px' }}>{formatINR(userPaid)}</div>
             </div>
 
             <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', padding: '0.65rem 1.1rem', borderRadius: '12px' }}>
-              <div style={{ fontSize: '0.72rem', color: '#0369a1', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.03em' }}>Your Share</div>
+              <div style={{ fontSize: '0.72rem', color: '#0369a1', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.03em' }}>{t.yourShare}</div>
               <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0284c7', marginTop: '1px' }}>{formatINR(userShare)}</div>
             </div>
 
@@ -324,10 +324,10 @@ export const TripDetail: React.FC<Props> = ({
               borderRadius: '12px',
             }}>
               <div style={{ fontSize: '0.72rem', color: userNet > 0 ? '#047857' : userNet < 0 ? '#be123c' : '#64748b', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.03em' }}>
-                {userNet > 0 ? 'You Get Back' : userNet < 0 ? 'You Owe' : 'Net Status'}
+                {userNet > 0 ? t.youGetBack : userNet < 0 ? t.youOwe : t.netStatus}
               </div>
               <div style={{ fontSize: '1.25rem', fontWeight: 800, color: userNet > 0 ? '#047857' : userNet < 0 ? '#be123c' : '#0f172a', marginTop: '1px' }}>
-                {userNet > 0 ? `+${formatINR(userNet)}` : userNet < 0 ? `-${formatINR(Math.abs(userNet))}` : 'Settled (₹0)'}
+                {userNet > 0 ? `+${formatINR(userNet)}` : userNet < 0 ? `-${formatINR(Math.abs(userNet))}` : t.settledZero}
               </div>
             </div>
           </div>
@@ -339,10 +339,10 @@ export const TripDetail: React.FC<Props> = ({
         {[
           { id: 'expenses', label: t.expenses, icon: Receipt, count: expenses.length },
           { id: 'ledger', label: t.settlements, icon: Scale, count: ledger?.suggestedSettlements?.length },
-          { id: 'members', label: 'Trip Members', icon: Users, count: trip.participants.length },
+          { id: 'members', label: t.tripMembers, icon: Users, count: trip.participants.length },
           { id: 'attendance', label: t.attendance, icon: CheckCircle2 },
           { id: 'reports', label: t.reports, icon: BarChart3 },
-          { id: 'map', label: 'Map', icon: MapPin },
+          { id: 'map', label: t.mapTab, icon: MapPin },
         ].map(tab => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -391,9 +391,9 @@ export const TripDetail: React.FC<Props> = ({
           {expenses.length === 0 ? (
             <div className="card-white p-8 text-center" style={{ borderRadius: '16px', padding: '3rem 2rem' }}>
               <Receipt size={40} style={{ color: '#0f172a', margin: '0 auto 1rem', opacity: 0.6 }} />
-              <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '0.5rem', color: '#0f172a', fontFamily: 'var(--font-display)' }}>No expenses recorded yet</h3>
+              <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '0.5rem', color: '#0f172a', fontFamily: 'var(--font-display)' }}>{t.noExpensesYet}</h3>
               <p style={{ color: '#64748b', marginBottom: '1.5rem', maxWidth: '420px', margin: '0 auto 1.5rem', fontSize: '0.92rem' }}>
-                Record shared group expenses, travel tickets, dining, or stays with customized individual shares and equal remainder splitting.
+                {t.noExpensesDesc}
               </p>
               <div style={{ display: 'flex', justifyContent: 'center', gap: '0.75rem' }}>
                 <button type="button" onClick={() => setShowSplitWizard(true)} className="btn btn-primary">
@@ -428,7 +428,7 @@ export const TripDetail: React.FC<Props> = ({
                     </div>
 
                     <div style={{ fontSize: '0.82rem', color: '#64748b', marginTop: '0.35rem' }}>
-                      {exp.expense_date} · Paid by <strong style={{ color: '#0f172a' }}>{exp.payer_name}</strong> · {exp.participant_count} participants
+                      {exp.expense_date} · {t.paidBy} <strong style={{ color: '#0f172a' }}>{exp.payer_name}</strong> · {exp.participant_count} {t.participants}
                     </div>
 
                     {/* Member Share Highlight for Logged-In User */}
@@ -436,16 +436,16 @@ export const TripDetail: React.FC<Props> = ({
                       <div style={{ marginTop: '0.45rem', display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
                         {exp.is_my_payment === 1 && (
                           <span style={{ fontSize: '0.72rem', fontWeight: 600, background: '#dcfce7', color: '#15803d', padding: '0.15rem 0.55rem', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
-                            <Check size={12} /> You paid this full bill
+                            <Check size={12} /> {t.youPaidFullBill}
                           </span>
                         )}
                         {exp.my_share_paise > 0 ? (
                           <span style={{ fontSize: '0.72rem', fontWeight: 600, background: '#e0f2fe', color: '#0369a1', padding: '0.15rem 0.55rem', borderRadius: '6px' }}>
-                            Your share: {formatINR(exp.my_share_paise)}
+                            {t.yourShare}: {formatINR(exp.my_share_paise)}
                           </span>
                         ) : exp.is_my_payment !== 1 && (
                           <span style={{ fontSize: '0.72rem', color: '#94a3b8', background: '#f1f5f9', padding: '0.15rem 0.55rem', borderRadius: '6px' }}>
-                            Not in your split
+                            {t.notInYourSplit}
                           </span>
                         )}
                       </div>
@@ -486,7 +486,7 @@ export const TripDetail: React.FC<Props> = ({
             <div className="card-white" style={{ borderRadius: '16px', padding: '1.35rem 1.5rem', border: '1px solid #e2e8f0' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
                 <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Total Trip Spend
+                  {t.totalTripSpend}
                 </span>
                 <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0f172a' }}>
                   <CreditCard size={18} />
@@ -496,7 +496,7 @@ export const TripDetail: React.FC<Props> = ({
                 {formatINR(ledger?.totalGroupSpend || 0)}
               </div>
               <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '0.35rem' }}>
-                Across {expenses.filter(e => !e.voided_at).length} active expenses
+                {expenses.filter(e => !e.voided_at).length} {t.acrossActiveExpenses}
               </div>
             </div>
 
@@ -504,7 +504,7 @@ export const TripDetail: React.FC<Props> = ({
             <div className="card-white" style={{ borderRadius: '16px', padding: '1.35rem 1.5rem', border: '1px solid #e2e8f0' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
                 <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Your Share
+                  {t.yourShare}
                 </span>
                 <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#e0f2fe', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0284c7' }}>
                   <Users size={18} />
@@ -514,7 +514,7 @@ export const TripDetail: React.FC<Props> = ({
                 {formatINR(userShare)}
               </div>
               <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '0.35rem' }}>
-                You paid {formatINR(userPaid)} directly
+                {t.youPaidDirectly} {formatINR(userPaid)}
               </div>
             </div>
 
@@ -527,7 +527,7 @@ export const TripDetail: React.FC<Props> = ({
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
                 <span style={{ fontSize: '0.8rem', fontWeight: 700, color: userNet > 0 ? '#15803d' : userNet < 0 ? '#b91c1c' : '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  {userNet > 0 ? 'You Get Back' : userNet < 0 ? 'You Owe' : 'Your Balance'}
+                  {userNet > 0 ? t.youGetBack : userNet < 0 ? t.youOwe : t.netStatus}
                 </span>
                 <div style={{
                   width: '32px',
@@ -548,10 +548,10 @@ export const TripDetail: React.FC<Props> = ({
                 color: userNet > 0 ? '#15803d' : userNet < 0 ? '#b91c1c' : '#64748b',
                 fontFamily: 'var(--font-display)',
               }}>
-                {userNet > 0 ? `+${formatINR(userNet)}` : userNet < 0 ? `-${formatINR(Math.abs(userNet))}` : '₹0 Settled'}
+                {userNet > 0 ? `+${formatINR(userNet)}` : userNet < 0 ? `-${formatINR(Math.abs(userNet))}` : t.settledZero}
               </div>
               <div style={{ fontSize: '0.78rem', color: userNet > 0 ? '#15803d' : userNet < 0 ? '#b91c1c' : '#64748b', marginTop: '0.35rem' }}>
-                {userNet > 0 ? 'Others owe you money' : userNet < 0 ? 'Please settle with members' : 'All accounts even'}
+                {userNet > 0 ? t.othersOweYou : userNet < 0 ? t.pleaseSettle : t.allAccountsEven}
               </div>
             </div>
           </div>
@@ -573,12 +573,12 @@ export const TripDetail: React.FC<Props> = ({
               </div>
               <div>
                 <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0f172a' }}>
-                  {ledger?.status === 'settled' ? 'Trip is fully settled' : 'Unsettled balances pending'}
+                  {ledger?.status === 'settled' ? t.tripFullySettled : t.unsettledBalancesPending}
                 </div>
                 <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
                   {ledger?.status === 'settled'
-                    ? 'All participant debits and credits have been reconciled.'
-                    : 'Check suggested transfers below to settle with minimum transactions.'}
+                    ? t.allBalancesReconciled
+                    : t.checkSuggestedTransfers}
                 </div>
               </div>
             </div>

@@ -383,10 +383,10 @@ export const AdminDashboard: React.FC<Props> = ({ onExitAdmin, onSelectTrip, onL
                 letterSpacing: '-0.02em',
               }}
             >
-              TripMates Super Admin
+              {t.superAdminTitle}
             </h1>
             <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
-              Authenticated Management Dashboard & Audit Inspector
+              {t.superAdminSubtitle}
             </div>
           </div>
         </div>
@@ -406,7 +406,7 @@ export const AdminDashboard: React.FC<Props> = ({ onExitAdmin, onSelectTrip, onL
               gap: '0.35rem',
             }}
           >
-            <Shield size={13} /> Full Authorization
+            <Shield size={13} /> {t.fullAuthorization}
           </span>
 
           <button
@@ -426,7 +426,7 @@ export const AdminDashboard: React.FC<Props> = ({ onExitAdmin, onSelectTrip, onL
               gap: '0.4rem',
             }}
           >
-            <span>Exit Admin</span>
+            <span>{t.exitAdmin}</span>
             <ArrowRight size={14} />
           </button>
           {onLogout && (
