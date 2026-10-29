@@ -7,10 +7,12 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 3000,
+    host: true,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:4000',
+        target: process.env.VITE_BACKEND_TARGET || 'https://tripmates-backend.onrender.com',
         changeOrigin: true,
+        secure: false,
       },
     },
   },

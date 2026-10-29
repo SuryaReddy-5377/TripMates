@@ -5,11 +5,10 @@ export interface ApiResponse<T = any> {
 }
 
 const envBaseUrl = (import.meta as any).env?.VITE_API_BASE_URL as string | undefined;
-const isProductionHost = typeof window !== 'undefined' &&
-  window.location.hostname !== 'localhost' &&
-  window.location.hostname !== '127.0.0.1';
 
-const RAW_BASE_URL = envBaseUrl || (isProductionHost ? 'https://tripmates-backend.onrender.com/api' : '/api');
+// Connect directly to live Render backend by default so both Vercel & local development work seamlessly
+const DEFAULT_API_BASE = 'https://tripmates-backend.onrender.com/api';
+const RAW_BASE_URL = envBaseUrl || DEFAULT_API_BASE;
 const BASE_URL = RAW_BASE_URL.replace(/\/+$/, '');
 
 export async function request<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -35,9 +34,12 @@ export async function request<T = any>(endpoint: string, options: RequestInit = 
   const data = isJson ? await response.json() : await response.text();
 
   if (!response.ok) {
-    let errorMsg = response.status === 404
-      ? 'Backend service unreachable or route not found (HTTP 404). Please ensure the backend server is running on port 4000.'
-      : `HTTP ${response.status}`;
+    let errorMsg = `HTTP ${response.status}`;
+    if (response.status === 404) {
+      errorMsg = 'Backend route not found (HTTP 404). Please ensure your Render backend service is awake and running.';
+    } else if (response.status === 502 || response.status === 503 || response.status === 504) {
+      errorMsg = 'Render backend is waking up (takes ~30-50s on free tier). Please try again in a moment.';
+    }
     if (data && typeof data === 'object') {
       if (data.message) {
         errorMsg = data.message;

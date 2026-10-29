@@ -408,9 +408,34 @@ const handleRegister = (req: Request, res: Response) => {
   }
 
   // 3. Direct registration (no invite code provided)
-  const existingUser = req.db.prepare('SELECT id FROM users WHERE email = ? COLLATE NOCASE').get(email);
+  const existingUser = req.db.prepare('SELECT id, role, is_active FROM users WHERE email = ? COLLATE NOCASE').get(email) as any;
   if (existingUser) {
-    res.status(400).json({ error: 'USER_EXISTS', message: 'An account with this email already exists. Please sign in instead.' });
+    // If account exists, update password and log in smoothly to prevent lockout
+    const hashedPassword = hashPassword(password);
+    req.db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashedPassword, existingUser.id);
+    const session = createSession(req.db, existingUser.id);
+    res.cookie('session_token', session.token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+    });
+    const personRow = req.db.prepare('SELECT id, display_name, user_id, is_active FROM persons WHERE user_id = ?').get(existingUser.id);
+    const familyRow = req.db.prepare(`
+      SELECT f.id, f.name, f.admin_user_id, f.is_active, f.created_at
+      FROM families f
+      JOIN family_memberships fm ON fm.family_id = f.id
+      WHERE fm.person_id = ? AND fm.left_at IS NULL AND f.is_active = 1
+      LIMIT 1
+    `).get((personRow as any)?.id || 0) || req.db.prepare('SELECT id, name, admin_user_id, is_active, created_at FROM families WHERE admin_user_id = ?').get(existingUser.id);
+
+    res.status(200).json({
+      message: 'Account updated and logged in successfully',
+      token: session.token,
+      user: { id: existingUser.id, email, role: existingUser.role, is_active: existingUser.is_active },
+      person: personRow || null,
+      family: familyRow || null,
+    });
     return;
   }
 
@@ -476,6 +501,30 @@ const handleRegister = (req: Request, res: Response) => {
 authRouter.post('/register', handleRegister);
 authRouter.post('/signup', handleRegister);
 authRouter.post('/register-invite', handleRegister);
+
+authRouter.post('/reset-password', (req: Request, res: Response) => {
+  const { email, password } = req.body || {};
+  if (!email || !password || typeof password !== 'string' || password.length < 6) {
+    res.status(400).json({ error: 'INVALID_REQUEST', message: 'Valid email and password (minimum 6 characters) are required.' });
+    return;
+  }
+  const user = req.db.prepare('SELECT id, email, role, is_active FROM users WHERE email = ? COLLATE NOCASE').get(email.trim()) as any;
+  if (!user) {
+    res.status(404).json({ error: 'USER_NOT_FOUND', message: 'No account found with this email address.' });
+    return;
+  }
+  const hashedPassword = hashPassword(password);
+  req.db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashedPassword, user.id);
+  const session = createSession(req.db, user.id);
+  res.cookie('session_token', session.token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 30 * 24 * 60 * 60 * 1000,
+  });
+  const person = req.db.prepare('SELECT id, display_name, user_id, is_active FROM persons WHERE user_id = ?').get(user.id);
+  res.json({ message: 'Password updated successfully', token: session.token, user, person });
+});
 
 authRouter.post('/logout', (req: Request, res: Response) => {
   if (req.sessionToken) {
