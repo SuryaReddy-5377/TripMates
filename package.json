@@ -17,7 +17,9 @@
     "dev:frontend": "vite",
     "start": "tsx backend/src/index.ts",
     "setup-admin": "tsx backend/src/cli/setup-admin.ts",
-    "package": "tsx backend/src/cli/package-app.ts"
+    "package": "tsx backend/src/cli/package-app.ts",
+    "db:verify": "tsx backend/src/scripts/verify-db.ts",
+    "db:backup": "tsx backend/src/scripts/backup-db.ts"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.10",

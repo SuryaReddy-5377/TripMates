@@ -3,16 +3,12 @@ import { useI18n } from '../i18n/context';
 import { api } from '../api/client';
 import {
   MapPinned,
-  Lock,
   Camera,
   Receipt,
   ShieldCheck,
   Sparkles,
   AlertCircle,
-  UserCheck,
   X,
-  User,
-  ArrowRight,
   Eye,
   EyeOff,
 } from 'lucide-react';
@@ -26,23 +22,30 @@ interface RememberedAccount {
 
 interface Props {
   hasSuperAdmin: boolean;
+  isSetupMode?: boolean;
   onAuthSuccess: (data: any) => void;
   onNavigateToAdmin?: () => void;
+  onExitSetup?: () => void;
 }
 
-export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess }) => {
+export const AuthScreen: React.FC<Props> = ({
+  hasSuperAdmin,
+  isSetupMode = false,
+  onAuthSuccess,
+  onExitSetup,
+}) => {
   const { t, language, setLanguage } = useI18n();
 
-  const [localHasSuperAdmin, setLocalHasSuperAdmin] = useState(hasSuperAdmin);
+  // Landing page hero view vs split auth form view
+  const [view, setView] = useState<'landing' | 'auth'>(isSetupMode && !hasSuperAdmin ? 'auth' : 'landing');
 
-  useEffect(() => {
-    setLocalHasSuperAdmin(hasSuperAdmin);
-  }, [hasSuperAdmin]);
-
-  // 'landing' shows the full-bleed hero page matching lovable.app
-  // 'auth' shows the split sign-in / register view matching lovable.app/auth
-  const [view, setView] = useState<'landing' | 'auth'>('landing');
-  const [tab, setTab] = useState<'signin' | 'register'>('signin');
+  // Active form mode:
+  // 'signin' -> Standard family & administrative login
+  // 'register' -> Family registration with optional/required invitation code
+  // 'setup' -> Genuine initial Super Admin setup (ONLY when system is unconfigured and requested)
+  const [tab, setTab] = useState<'signin' | 'register' | 'setup'>(
+    isSetupMode && !hasSuperAdmin ? 'setup' : 'signin'
+  );
 
   // Form fields
   const [email, setEmail] = useState('');
@@ -142,50 +145,30 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess }) =>
     setIsSubmitting(true);
 
     try {
-      if (!localHasSuperAdmin) {
-        // First-time setup
-        try {
-          const res = await api.post('/auth/setup-admin', {
-            email: email.trim(),
-            password,
-            displayName: displayName.trim(),
-          });
-          if (res.token) {
-            localStorage.setItem('tripmates_token', res.token);
-          }
-          saveRememberedAccount(email, displayName);
-          onAuthSuccess(res);
-          return;
-        } catch (setupErr: any) {
-          if (setupErr.data?.error === 'SUPER_ADMIN_EXISTS' || setupErr.message?.includes('already exists')) {
-            setLocalHasSuperAdmin(true);
-            setTab('signin');
-            try {
-              const loginRes = await api.post('/auth/login', {
-                email: email.trim(),
-                password,
-              });
-              if (loginRes.token) {
-                localStorage.setItem('tripmates_token', loginRes.token);
-              }
-              saveRememberedAccount(email, displayName);
-              onAuthSuccess(loginRes);
-              return;
-            } catch {
-              setErrorMsg('A Super Admin already exists in the system. Please enter your password to sign in.');
-              return;
-            }
-          }
-          throw setupErr;
+      if (tab === 'setup') {
+        // Genuine initial Super Admin setup
+        const res = await api.post('/auth/setup-admin', {
+          email: email.trim(),
+          password,
+          displayName: displayName.trim(),
+        });
+        if (res.token) {
+          localStorage.setItem('tripmates_token', res.token);
         }
-      } else if (tab === 'register') {
+        saveRememberedAccount(email, displayName);
+        onAuthSuccess(res);
+        return;
+      }
+
+      if (tab === 'register') {
+        // Registration with optional or required invite code
         const payload: any = {
           email: email.trim(),
           password,
           displayName: displayName.trim(),
         };
         if (inviteCode.trim()) {
-          payload.invite_code = inviteCode.trim();
+          payload.invite_code = inviteCode.trim().toUpperCase();
         }
         const res = await api.post('/auth/register', payload);
         if (res.token) {
@@ -193,18 +176,19 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess }) =>
         }
         saveRememberedAccount(email, displayName);
         onAuthSuccess(res);
-      } else {
-        // Regular email/password login
-        const res = await api.post('/auth/login', {
-          email: email.trim(),
-          password,
-        });
-        if (res.token) {
-          localStorage.setItem('tripmates_token', res.token);
-        }
-        saveRememberedAccount(email, res.person?.display_name || email.split('@')[0]);
-        onAuthSuccess(res);
+        return;
       }
+
+      // Standard Family & Administrator Sign In
+      const res = await api.post('/auth/login', {
+        email: email.trim(),
+        password,
+      });
+      if (res.token) {
+        localStorage.setItem('tripmates_token', res.token);
+      }
+      saveRememberedAccount(email, res.person?.display_name || email.split('@')[0]);
+      onAuthSuccess(res);
     } catch (err: any) {
       setErrorMsg(err.message || 'Authentication failed');
     } finally {
@@ -228,87 +212,113 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess }) =>
       }}>
         {/* Full-bleed Beach Vacation Hero Image */}
         <img
-          src="/images/photo-family-beach.jpg"
-          alt="Family at the beach"
+          src="/images/hero-beach.jpg"
+          alt="Family Beach Holiday"
           style={{
             position: 'absolute',
             inset: 0,
             width: '100%',
             height: '100%',
             objectFit: 'cover',
-            opacity: 0.72,
+            filter: 'brightness(0.72) contrast(1.08)',
           }}
         />
 
-        {/* Gradient Scrim Overlay */}
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            background: 'linear-gradient(180deg, rgba(15, 23, 42, 0.35) 0%, rgba(15, 23, 42, 0.55) 50%, rgba(15, 23, 42, 0.92) 100%)',
-          }}
-        />
-
-        {/* Inner Content Container */}
+        {/* Cinematic Gradient Scrim */}
         <div style={{
+          position: 'absolute',
+          inset: 0,
+          background: 'linear-gradient(180deg, rgba(15, 23, 42, 0.45) 0%, rgba(15, 23, 42, 0.6) 45%, rgba(15, 23, 42, 0.95) 100%)',
+        }} />
+
+        {/* Top Floating Glass Navigation */}
+        <header style={{
           position: 'relative',
-          maxWidth: '1024px',
-          width: '100%',
-          margin: '0 auto',
-          padding: '1.75rem 1.5rem 3rem 1.5rem',
+          zIndex: 10,
           display: 'flex',
-          flexDirection: 'column',
-          minHeight: '100vh',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '1.25rem 2rem',
+          maxWidth: '1240px',
+          margin: '0 auto',
+          width: '100%',
           boxSizing: 'border-box',
         }}>
-          {/* Top Bar: Brand + Language Switcher */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-              <span style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: '38px',
-                height: '38px',
-                borderRadius: '12px',
-                background: '#ffffff',
-                color: '#0f172a',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-              }}>
-                <MapPinned size={20} />
-              </span>
-              <span style={{
-                fontFamily: 'var(--font-display)',
-                fontSize: '1.35rem',
-                fontWeight: 600,
-                color: '#ffffff',
-                letterSpacing: '-0.02em',
-              }}>
-                TripMates
-              </span>
-            </div>
+          {/* Brand Logo */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+            <span style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '40px',
+              height: '40px',
+              borderRadius: '12px',
+              background: '#ffffff',
+              color: '#0f172a',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            }}>
+              <MapPinned size={22} />
+            </span>
+            <span style={{
+              fontFamily: 'var(--font-display)',
+              fontSize: '1.45rem',
+              fontWeight: 700,
+              letterSpacing: '-0.02em',
+              color: '#ffffff',
+            }}>
+              TripMates
+            </span>
+          </div>
 
-            {/* Language Toggle */}
+          {/* Right Header Navigation Items */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.9rem' }}>
+            {/* Unconfigured System Alert Link */}
+            {!hasSuperAdmin && (
+              <button
+                type="button"
+                onClick={() => {
+                  setTab('setup');
+                  setView('auth');
+                  setErrorMsg(null);
+                }}
+                style={{
+                  background: 'rgba(59, 130, 246, 0.25)',
+                  border: '1px solid rgba(147, 197, 253, 0.5)',
+                  color: '#93c5fd',
+                  padding: '0.4rem 0.85rem',
+                  borderRadius: '20px',
+                  fontSize: '0.78rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                }}
+              >
+                <Sparkles size={14} /> Initial Setup
+              </button>
+            )}
+
+            {/* Language Switcher */}
             <div style={{
               display: 'flex',
-              gap: '0.25rem',
-              background: 'rgba(255, 255, 255, 0.12)',
-              backdropFilter: 'blur(8px)',
-              padding: '0.25rem',
+              gap: '0.2rem',
+              background: 'rgba(15, 23, 42, 0.65)',
+              backdropFilter: 'blur(12px)',
+              padding: '0.2rem',
               borderRadius: '10px',
-              border: '1px solid rgba(255, 255, 255, 0.2)',
+              border: '1px solid rgba(255, 255, 255, 0.15)',
             }}>
               <button
                 type="button"
-                id="landing-lang-en"
                 onClick={() => setLanguage('en')}
                 style={{
-                  background: language === 'en' ? '#ffffff' : 'transparent',
-                  color: language === 'en' ? '#0f172a' : '#f8fafc',
+                  background: language === 'en' ? 'rgba(255, 255, 255, 0.95)' : 'transparent',
+                  color: language === 'en' ? '#0f172a' : '#94a3b8',
                   border: 'none',
                   padding: '0.3rem 0.75rem',
-                  borderRadius: '6px',
-                  fontSize: '0.8rem',
+                  borderRadius: '8px',
+                  fontSize: '0.78rem',
                   fontWeight: 700,
                   cursor: 'pointer',
                   transition: 'all 0.15s ease',
@@ -318,15 +328,14 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess }) =>
               </button>
               <button
                 type="button"
-                id="landing-lang-te"
                 onClick={() => setLanguage('te')}
                 style={{
-                  background: language === 'te' ? '#ffffff' : 'transparent',
-                  color: language === 'te' ? '#0f172a' : '#f8fafc',
+                  background: language === 'te' ? 'rgba(255, 255, 255, 0.95)' : 'transparent',
+                  color: language === 'te' ? '#0f172a' : '#94a3b8',
                   border: 'none',
                   padding: '0.3rem 0.75rem',
-                  borderRadius: '6px',
-                  fontSize: '0.8rem',
+                  borderRadius: '8px',
+                  fontSize: '0.78rem',
                   fontWeight: 700,
                   cursor: 'pointer',
                   transition: 'all 0.15s ease',
@@ -336,46 +345,60 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess }) =>
               </button>
             </div>
           </div>
+        </header>
 
-          {/* Bottom Hero Content */}
-          <div className="fade-up" style={{ marginTop: 'auto', maxWidth: '640px', paddingTop: '4rem' }}>
-            {/* Private family badge */}
-            <p style={{
+        {/* Hero Content Section */}
+        <div style={{
+          position: 'relative',
+          zIndex: 10,
+          flex: 1,
+          display: 'flex',
+          alignItems: 'center',
+          maxWidth: '1240px',
+          margin: '0 auto',
+          padding: '2rem 2rem 4rem 2rem',
+          width: '100%',
+          boxSizing: 'border-box',
+        }}>
+          <div style={{ maxWidth: '680px' }}>
+            {/* Private Family Badge */}
+            <div style={{
               display: 'inline-flex',
               alignItems: 'center',
-              gap: '0.45rem',
-              borderRadius: '9999px',
-              background: 'rgba(255, 255, 255, 0.15)',
+              gap: '0.5rem',
+              padding: '0.4rem 0.95rem',
+              borderRadius: '999px',
+              background: 'rgba(255, 255, 255, 0.12)',
               backdropFilter: 'blur(10px)',
-              padding: '0.35rem 0.9rem',
-              fontSize: '0.8rem',
+              border: '1px solid rgba(255, 255, 255, 0.25)',
+              fontSize: '0.84rem',
               fontWeight: 600,
               color: '#ffffff',
-              marginBottom: '1rem',
-              border: '1px solid rgba(255, 255, 255, 0.2)',
+              marginBottom: '1.5rem',
             }}>
-              <Lock size={14} /> {t.heroBadge}
-            </p>
+              <ShieldCheck size={16} style={{ color: '#10b981' }} />
+              {t.privateInvitationBadge}
+            </div>
 
-            {/* Editorial Serif Headline */}
+            {/* Headline */}
             <h1 style={{
               fontFamily: 'var(--font-display)',
-              fontSize: 'clamp(2.3rem, 5vw, 3.8rem)',
-              fontWeight: 600,
-              lineHeight: 1.1,
+              fontSize: 'clamp(2.5rem, 5.5vw, 4.2rem)',
+              lineHeight: 1.12,
+              fontWeight: 700,
+              letterSpacing: '-0.03em',
               color: '#ffffff',
-              letterSpacing: '-0.025em',
-              marginBottom: '1rem',
+              marginBottom: '1.25rem',
+              textShadow: '0 4px 20px rgba(0, 0, 0, 0.4)',
             }}>
               {t.heroHeadline}
             </h1>
 
             {/* Subtitle */}
             <p style={{
-              fontSize: 'clamp(1rem, 2vw, 1.15rem)',
-              color: 'rgba(255, 255, 255, 0.9)',
-              lineHeight: 1.55,
-              fontWeight: 400,
+              fontSize: 'clamp(1rem, 1.8vw, 1.25rem)',
+              lineHeight: 1.6,
+              color: 'rgba(255, 255, 255, 0.92)',
               marginBottom: '2rem',
               maxWidth: '560px',
             }}>
@@ -390,12 +413,14 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess }) =>
               gap: '0.9rem',
               marginBottom: '2.5rem',
             }}>
+              {/* Normal Sign In Button */}
               <button
                 type="button"
                 id="hero-signin-btn"
                 onClick={() => {
                   setTab('signin');
                   setView('auth');
+                  setErrorMsg(null);
                 }}
                 style={{
                   background: 'rgba(255, 255, 255, 0.95)',
@@ -418,12 +443,14 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess }) =>
                 {t.signIn}
               </button>
 
+              {/* Registration with Invitation Code Button */}
               <button
                 type="button"
                 id="hero-invite-btn"
                 onClick={() => {
                   setTab('register');
                   setView('auth');
+                  setErrorMsg(null);
                 }}
                 style={{
                   background: '#f59e0b',
@@ -478,14 +505,13 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess }) =>
   }
 
   // =========================================================================
-  // 2. AUTH SCREEN (Sign in / Register)
+  // 2. SPLIT AUTH SCREEN (Sign In / Registration / Initial Setup)
   // =========================================================================
   return (
     <div style={{
       minHeight: '100vh',
       display: 'grid',
-      gridTemplateColumns: 'minmax(0, 1fr)',
-      backgroundColor: '#fbfaf7',
+      backgroundColor: '#ffffff',
     }} className="auth-grid-container">
       <style>{`
         .auth-grid-container {
@@ -571,7 +597,11 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess }) =>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
           <button
             type="button"
-            onClick={() => setView('landing')}
+            onClick={() => {
+              setView('landing');
+              setErrorMsg(null);
+              if (onExitSetup) onExitSetup();
+            }}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -663,7 +693,7 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess }) =>
             letterSpacing: '-0.025em',
             marginBottom: '0.35rem',
           }}>
-            {!localHasSuperAdmin
+            {tab === 'setup'
               ? t.appName
               : tab === 'signin'
               ? t.welcomeBack
@@ -675,15 +705,15 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess }) =>
             color: '#64748b',
             marginBottom: '1.5rem',
           }}>
-            {!localHasSuperAdmin
+            {tab === 'setup'
               ? t.initialSetupDesc
               : tab === 'signin'
               ? t.welcomeSubtitle
               : t.joinFamilySubtitle}
           </p>
 
-          {/* First-time setup alert */}
-          {!localHasSuperAdmin && (
+          {/* Genuine Initial Setup Banner (ONLY visible when tab === 'setup') */}
+          {tab === 'setup' && (
             <div style={{
               background: '#eff6ff',
               border: '1px solid #bfdbfe',
@@ -703,7 +733,6 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess }) =>
                 <button
                   type="button"
                   onClick={() => {
-                    setLocalHasSuperAdmin(true);
                     setTab('signin');
                     setErrorMsg(null);
                   }}
@@ -725,8 +754,8 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess }) =>
             </div>
           )}
 
-          {/* Tab Switcher (if system is already initialized) */}
-          {localHasSuperAdmin && (
+          {/* Tab Switcher (Visible on ordinary sign-in and registration) */}
+          {tab !== 'setup' && (
             <div style={{
               display: 'grid',
               gridTemplateColumns: '1fr 1fr',
@@ -784,7 +813,7 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess }) =>
           )}
 
           {/* Remembered Accounts Section (Quick Login) */}
-          {localHasSuperAdmin && tab === 'signin' && rememberedAccounts.length > 0 && (
+          {tab === 'signin' && rememberedAccounts.length > 0 && (
             <div style={{
               marginBottom: '1.35rem',
               padding: '0.85rem',
@@ -796,10 +825,10 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess }) =>
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                marginBottom: '0.65rem',
+                marginBottom: '0.5rem',
               }}>
-                <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  {t.rememberedOnDevice}
+                <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  {t.quickLogin || 'Recent Accounts'}
                 </span>
                 {selectedAccount && (
                   <button
@@ -808,19 +837,19 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess }) =>
                     style={{
                       background: 'none',
                       border: 'none',
-                      fontSize: '0.74rem',
                       color: '#2563eb',
+                      fontSize: '0.74rem',
+                      fontWeight: 600,
                       cursor: 'pointer',
                       padding: 0,
-                      fontWeight: 600,
                     }}
                   >
-                    {t.useDifferentAccount}
+                    {t.useAnotherAccount}
                   </button>
                 )}
               </div>
 
-              <div style={{ display: 'grid', gap: '0.45rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                 {rememberedAccounts.map((acc) => {
                   const isSelected = selectedAccount?.email.toLowerCase() === acc.email.toLowerCase();
                   return (
@@ -831,13 +860,12 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess }) =>
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
-                        padding: '0.55rem 0.75rem',
+                        padding: '0.5rem 0.65rem',
                         borderRadius: '8px',
                         background: isSelected ? '#ffffff' : 'transparent',
-                        border: isSelected ? '1.5px solid #0f172a' : '1px solid #cbd5e1',
+                        border: isSelected ? '1.5px solid #0f172a' : '1px solid transparent',
                         cursor: 'pointer',
                         transition: 'all 0.15s ease',
-                        boxShadow: isSelected ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', overflow: 'hidden' }}>
@@ -914,14 +942,14 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess }) =>
           {/* Form */}
           <form onSubmit={handleSubmit} style={{ display: 'grid', gap: '1.1rem' }}>
             {/* If Registering with Invite Code */}
-            {tab === 'register' && localHasSuperAdmin && (
+            {tab === 'register' && (
               <div className="form-group" style={{ margin: 0 }}>
                 <label className="form-label">{t.invitationCodeOptional}</label>
                 <input
                   type="text"
                   id="auth-invite-code"
                   className="form-input"
-                  placeholder="e.g. TRIP-789A or FAM-1234 (optional)"
+                  placeholder="e.g. FAM-1234 or TRIP-789A (optional)"
                   value={inviteCode}
                   onChange={e => setInviteCode(e.target.value.toUpperCase())}
                 />
@@ -929,7 +957,7 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess }) =>
             )}
 
             {/* Display Name (if setup or registering) */}
-            {(!localHasSuperAdmin || tab === 'register') && (
+            {(tab === 'setup' || tab === 'register') && (
               <div className="form-group" style={{ margin: 0 }}>
                 <label className="form-label">{t.fullName}</label>
                 <input
@@ -1021,7 +1049,7 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess }) =>
             >
               {isSubmitting
                 ? t.loading
-                : !localHasSuperAdmin
+                : tab === 'setup'
                 ? t.completeSetupLaunch
                 : tab === 'register'
                 ? t.registerAndJoinTrip

@@ -24,9 +24,11 @@ export function getDb(customPath?: string): DatabaseSync {
     if (dbPath !== ':memory:') {
       try {
         globalDb.exec('PRAGMA journal_mode = WAL;');
+        globalDb.exec('PRAGMA synchronous = NORMAL;');
       } catch {
         // Fallback for filesystems that do not support WAL
       }
+      console.log(`[Database] Connected to SQLite database at: ${dbPath} (${config.isPersistentDisk ? 'Persistent Disk' : 'Local / Ephemeral Storage'})`);
     }
   }
   return globalDb;

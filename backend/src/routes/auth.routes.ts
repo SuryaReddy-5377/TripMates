@@ -19,6 +19,7 @@ const quickLoginSchema = z.object({
 
 const registerInviteSchema = z.object({
   invite_code: z.string().optional().nullable(),
+  inviteCode: z.string().optional().nullable(),
   email: z.string().email(),
   password: z.string().min(6),
   displayName: z.string().min(2),
@@ -44,50 +45,10 @@ authRouter.get('/status', (req: Request, res: Response) => {
 
 authRouter.post('/setup-admin', (req: Request, res: Response) => {
   if (hasSuperAdmin(req.db)) {
-    const parseResult = setupAdminSchema.safeParse(req.body);
-    if (parseResult.success) {
-      const { email, password } = parseResult.data;
-      const userRow = req.db.prepare(`
-        SELECT id, email, password_hash, role, is_active, created_at
-        FROM users
-        WHERE email = ? COLLATE NOCASE
-      `).get(email) as any;
-
-      if (userRow && userRow.role === 'super_admin') {
-        const hashedPassword = hashPassword(password);
-        req.db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashedPassword, userRow.id);
-        const session = createSession(req.db, userRow.id);
-
-        res.cookie('session_token', session.token, {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === 'production',
-          sameSite: 'lax',
-          maxAge: 30 * 24 * 60 * 60 * 1000,
-        });
-
-        const personRow = req.db.prepare(`
-          SELECT id, display_name, user_id, is_active
-          FROM persons
-          WHERE user_id = ? AND is_active = 1
-        `).get(userRow.id);
-
-        res.json({
-          message: 'Super Admin logged in successfully',
-          user: {
-            id: userRow.id,
-            email: userRow.email,
-            role: userRow.role,
-            is_active: userRow.is_active,
-            created_at: userRow.created_at,
-          },
-          person: personRow || null,
-          family: null,
-          token: session.token,
-        });
-        return;
-      }
-    }
-    res.status(400).json({ error: 'SUPER_ADMIN_EXISTS', message: 'A Super Admin already exists in the system. Please sign in.' });
+    res.status(403).json({
+      error: 'SETUP_DISABLED',
+      message: 'Initial Super Admin setup is permanently disabled because a Super Admin is already configured in the system.',
+    });
     return;
   }
 
@@ -267,35 +228,49 @@ const handleRegister = (req: Request, res: Response) => {
     res.status(400).json({ error: 'VALIDATION_ERROR', details: parseResult.error.format() });
     return;
   }
-  const { invite_code, email, password, displayName } = parseResult.data;
-  const cleanCode = (invite_code || '').trim();
+  const { email, password, displayName } = parseResult.data;
+  const rawCode = parseResult.data.invite_code || parseResult.data.inviteCode || req.body.invite_code || req.body.inviteCode;
+  const cleanCode = typeof rawCode === 'string' ? rawCode.trim().toUpperCase() : '';
 
-  // If an invite code was supplied, validate it:
+  // 1. Strict Email Uniqueness Check across all registration paths
+  const existingUser = req.db.prepare('SELECT id FROM users WHERE email = ? COLLATE NOCASE').get(email);
+  if (existingUser) {
+    res.status(400).json({
+      error: 'USER_EXISTS',
+      message: 'An account with this email already exists. Please sign in with your password instead.',
+    });
+    return;
+  }
+
+  // 2. Validate Invitation Code (if supplied)
   if (cleanCode.length > 0) {
-    // 1. Check family_invite_codes table first
+    // 2a. Check family_invite_codes table first (Super Admin generated codes)
     const famCode = req.db.prepare(`
       SELECT * FROM family_invite_codes
       WHERE code = ? COLLATE NOCASE
     `).get(cleanCode) as any;
 
     if (famCode) {
+      if (famCode.status === 'revoked') {
+        res.status(400).json({ error: 'CODE_REVOKED', message: 'This invitation code has been revoked by an administrator.' });
+        return;
+      }
+      if (famCode.status === 'exhausted' || famCode.uses_count >= famCode.max_uses) {
+        res.status(400).json({ error: 'CODE_EXHAUSTED', message: 'This invitation code has reached its maximum usage limit.' });
+        return;
+      }
       if (famCode.status !== 'active') {
-        res.status(400).json({ error: 'CODE_INACTIVE', message: 'This family invite code has been revoked or exhausted.' });
+        res.status(400).json({ error: 'CODE_INACTIVE', message: 'This invitation code is currently inactive.' });
         return;
       }
-      if (famCode.expires_at && new Date(famCode.expires_at) < new Date()) {
-        res.status(400).json({ error: 'CODE_EXPIRED', message: 'This family invite code has expired.' });
-        return;
-      }
-      if (famCode.uses_count >= famCode.max_uses) {
-        res.status(400).json({ error: 'CODE_EXHAUSTED', message: 'This family invite code has reached its maximum usage limit.' });
-        return;
-      }
-
-      const existingUser = req.db.prepare('SELECT id FROM users WHERE email = ? COLLATE NOCASE').get(email);
-      if (existingUser) {
-        res.status(400).json({ error: 'USER_EXISTS', message: 'An account with this email already exists. Please sign in instead.' });
-        return;
+      if (famCode.expires_at) {
+        const expTime = famCode.expires_at.includes('T')
+          ? new Date(famCode.expires_at).getTime()
+          : new Date(`${famCode.expires_at}T23:59:59.999Z`).getTime();
+        if (expTime < Date.now()) {
+          res.status(400).json({ error: 'CODE_EXPIRED', message: 'This invitation code has expired.' });
+          return;
+        }
       }
 
       const hashedPassword = hashPassword(password);
@@ -311,7 +286,7 @@ const handleRegister = (req: Request, res: Response) => {
           `).run(famCode.id);
 
           if (updated.changes === 0) {
-            throw new Error('This invite code usage limit was exceeded or is no longer active.');
+            throw new Error('This invitation code usage limit was reached or is no longer active.');
           }
 
           const userRes = req.db.prepare(`
@@ -333,6 +308,19 @@ const handleRegister = (req: Request, res: Response) => {
               VALUES (?, ?)
             `).run(famCode.family_id, personId);
             family = req.db.prepare('SELECT * FROM families WHERE id = ?').get(famCode.family_id);
+          } else {
+            // If invite code was created globally without a family, create a personal family
+            const famName = `${displayName}'s Family`;
+            const famRes = req.db.prepare(`
+              INSERT INTO families (name, admin_user_id)
+              VALUES (?, ?)
+            `).run(famName, userId);
+            const familyId = Number(famRes.lastInsertRowid);
+            req.db.prepare(`
+              INSERT INTO family_memberships (family_id, person_id)
+              VALUES (?, ?)
+            `).run(familyId, personId);
+            family = req.db.prepare('SELECT * FROM families WHERE id = ?').get(familyId);
           }
 
           const session = createSession(req.db, userId);
@@ -364,124 +352,121 @@ const handleRegister = (req: Request, res: Response) => {
       }
     }
 
-    // 2. Fall back to existing trip-based invitations
+    // 2b. Check trip-based invitations table
     const invite = req.db.prepare(`
       SELECT i.*, t.name as trip_name
       FROM invitations i
-      JOIN trips t ON i.trip_id = t.id
-      WHERE i.invite_code = ? COLLATE NOCASE AND i.status = 'pending'
+      LEFT JOIN trips t ON i.trip_id = t.id
+      WHERE i.invite_code = ? COLLATE NOCASE
     `).get(cleanCode) as any;
 
-    if (!invite) {
-      res.status(404).json({ error: 'INVALID_INVITE', message: 'Invalid or expired invitation code' });
-      return;
-    }
-
-    const existingUser = req.db.prepare('SELECT id FROM users WHERE email = ? COLLATE NOCASE').get(email);
-    if (existingUser) {
-      res.status(400).json({ error: 'USER_EXISTS', message: 'An account with this email already exists. Please sign in instead.' });
-      return;
-    }
-
-    const hashedPassword = hashPassword(password);
-
-    try {
-      const result = withTransaction(req.db, () => {
-        const userRes = req.db.prepare(`
-          INSERT INTO users (email, password_hash, role)
-          VALUES (?, ?, 'member')
-        `).run(email, hashedPassword);
-        const userId = Number(userRes.lastInsertRowid);
-
-        const personRes = req.db.prepare(`
-          INSERT INTO persons (display_name, user_id)
-          VALUES (?, ?)
-        `).run(displayName, userId);
-        const personId = Number(personRes.lastInsertRowid);
-
-        if (invite.family_id) {
-          req.db.prepare(`
-            INSERT INTO family_memberships (family_id, person_id)
-            VALUES (?, ?)
-          `).run(invite.family_id, personId);
+    if (invite) {
+      if (invite.status === 'accepted') {
+        res.status(400).json({ error: 'CODE_ALREADY_USED', message: 'This trip invitation code has already been used.' });
+        return;
+      }
+      if (invite.status !== 'pending') {
+        res.status(400).json({ error: 'CODE_INACTIVE', message: `This trip invitation code is ${invite.status}.` });
+        return;
+      }
+      if (invite.expires_at) {
+        const expTime = invite.expires_at.includes('T')
+          ? new Date(invite.expires_at).getTime()
+          : new Date(`${invite.expires_at}T23:59:59.999Z`).getTime();
+        if (expTime < Date.now()) {
+          res.status(400).json({ error: 'CODE_EXPIRED', message: 'This trip invitation code has expired.' });
+          return;
         }
+      }
 
-        req.db.prepare(`
-          INSERT OR IGNORE INTO trip_participants (trip_id, person_id, attendance)
-          VALUES (?, ?, 'coming')
-        `).run(invite.trip_id, personId);
+      const hashedPassword = hashPassword(password);
 
-        req.db.prepare(`
-          UPDATE invitations
-          SET status = 'accepted', person_id = COALESCE(person_id, ?)
-          WHERE id = ?
-        `).run(personId, invite.id);
+      try {
+        const result = withTransaction(req.db, () => {
+          const userRes = req.db.prepare(`
+            INSERT INTO users (email, password_hash, role)
+            VALUES (?, ?, 'member')
+          `).run(email, hashedPassword);
+          const userId = Number(userRes.lastInsertRowid);
 
-        const session = createSession(req.db, userId);
+          const personRes = req.db.prepare(`
+            INSERT INTO persons (display_name, user_id)
+            VALUES (?, ?)
+          `).run(displayName, userId);
+          const personId = Number(personRes.lastInsertRowid);
 
-        res.cookie('session_token', session.token, {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === 'production',
-          sameSite: 'lax',
-          maxAge: 30 * 24 * 60 * 60 * 1000,
+          if (invite.family_id) {
+            req.db.prepare(`
+              INSERT INTO family_memberships (family_id, person_id)
+              VALUES (?, ?)
+            `).run(invite.family_id, personId);
+          } else {
+            const famName = `${displayName}'s Family`;
+            const famRes = req.db.prepare(`
+              INSERT INTO families (name, admin_user_id)
+              VALUES (?, ?)
+            `).run(famName, userId);
+            const familyId = Number(famRes.lastInsertRowid);
+            req.db.prepare(`
+              INSERT INTO family_memberships (family_id, person_id)
+              VALUES (?, ?)
+            `).run(familyId, personId);
+          }
+
+          if (invite.trip_id) {
+            req.db.prepare(`
+              INSERT OR IGNORE INTO trip_participants (trip_id, person_id, attendance)
+              VALUES (?, ?, 'coming')
+            `).run(invite.trip_id, personId);
+          }
+
+          req.db.prepare(`
+            UPDATE invitations
+            SET status = 'accepted', person_id = COALESCE(person_id, ?)
+            WHERE id = ?
+          `).run(personId, invite.id);
+
+          const session = createSession(req.db, userId);
+
+          res.cookie('session_token', session.token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            maxAge: 30 * 24 * 60 * 60 * 1000,
+          });
+
+          const user = { id: userId, email, role: 'member', is_active: 1 };
+          const person = { id: personId, display_name: displayName, user_id: userId, is_active: 1 };
+          let family = null;
+          if (invite.family_id) {
+            family = req.db.prepare('SELECT * FROM families WHERE id = ?').get(invite.family_id);
+          } else {
+            family = req.db.prepare('SELECT * FROM families WHERE admin_user_id = ?').get(userId);
+          }
+
+          return { user, person, family, token: session.token };
         });
 
-        const user = { id: userId, email, role: 'member', is_active: 1 };
-        const person = { id: personId, display_name: displayName, user_id: userId, is_active: 1 };
-        let family = null;
-        if (invite.family_id) {
-          family = req.db.prepare('SELECT * FROM families WHERE id = ?').get(invite.family_id);
-        }
-
-        return { user, person, family, token: session.token };
-      });
-
-      res.status(201).json({
-        message: 'Registration successful',
-        token: result.token,
-        user: result.user,
-        person: result.person,
-        family: result.family,
-      });
-      return;
-    } catch (err: any) {
-      res.status(500).json({ error: 'REGISTRATION_FAILED', message: err.message });
-      return;
+        res.status(201).json({
+          message: 'Registration successful',
+          token: result.token,
+          user: result.user,
+          person: result.person,
+          family: result.family,
+        });
+        return;
+      } catch (err: any) {
+        res.status(500).json({ error: 'REGISTRATION_FAILED', message: err.message });
+        return;
+      }
     }
-  }
 
-  // 3. Direct registration (no invite code provided)
-  const existingUser = req.db.prepare('SELECT id, role, is_active FROM users WHERE email = ? COLLATE NOCASE').get(email) as any;
-  if (existingUser) {
-    // If account exists, update password and log in smoothly to prevent lockout
-    const hashedPassword = hashPassword(password);
-    req.db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashedPassword, existingUser.id);
-    const session = createSession(req.db, existingUser.id);
-    res.cookie('session_token', session.token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 30 * 24 * 60 * 60 * 1000,
-    });
-    const personRow = req.db.prepare('SELECT id, display_name, user_id, is_active FROM persons WHERE user_id = ?').get(existingUser.id);
-    const familyRow = req.db.prepare(`
-      SELECT f.id, f.name, f.admin_user_id, f.is_active, f.created_at
-      FROM families f
-      JOIN family_memberships fm ON fm.family_id = f.id
-      WHERE fm.person_id = ? AND fm.left_at IS NULL AND f.is_active = 1
-      LIMIT 1
-    `).get((personRow as any)?.id || 0) || req.db.prepare('SELECT id, name, admin_user_id, is_active, created_at FROM families WHERE admin_user_id = ?').get(existingUser.id);
-
-    res.status(200).json({
-      message: 'Account updated and logged in successfully',
-      token: session.token,
-      user: { id: existingUser.id, email, role: existingUser.role, is_active: existingUser.is_active },
-      person: personRow || null,
-      family: familyRow || null,
-    });
+    // Code was provided, but not found in either family_invite_codes or invitations
+    res.status(404).json({ error: 'INVALID_INVITE', message: 'Invitation code not found. Please verify the code and try again.' });
     return;
   }
 
+  // 3. Direct registration (no invite code provided)
   const hashedPassword = hashPassword(password);
 
   try {

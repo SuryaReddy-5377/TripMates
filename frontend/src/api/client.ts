@@ -33,11 +33,27 @@ export async function request<T = any>(endpoint: string, options: RequestInit = 
     cleanEndpoint = cleanEndpoint.slice(4);
   }
 
-  const response = await fetch(`${BASE_URL}${cleanEndpoint}`, {
-    ...options,
-    headers,
-    credentials: 'include',
-  });
+  // 15-second AbortController timeout to prevent hanging requests on network hiccups
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+  let response: Response;
+  try {
+    response = await fetch(`${BASE_URL}${cleanEndpoint}`, {
+      ...options,
+      headers,
+      credentials: 'include',
+      signal: options.signal || controller.signal,
+    });
+  } catch (fetchErr: any) {
+    clearTimeout(timeoutId);
+    if (fetchErr.name === 'AbortError') {
+      throw new Error('Connection timed out. The server is taking longer than expected to respond.');
+    }
+    throw new Error('Network error. Please check your internet connection or try again in a moment.');
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   const contentType = response.headers.get('content-type');
   const isJson = contentType && contentType.includes('application/json');
