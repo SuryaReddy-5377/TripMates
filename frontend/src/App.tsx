@@ -51,6 +51,8 @@ export const App: React.FC = () => {
       }
     } catch (err) {
       console.error('Failed to check auth status:', err);
+      // Guarantee hasSuperAdmin remains true on connection glitch so user gets standard login
+      setHasSuperAdmin(true);
     } finally {
       setLoading(false);
     }

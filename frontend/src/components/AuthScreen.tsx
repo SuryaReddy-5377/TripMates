@@ -33,6 +33,12 @@ interface Props {
 export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess }) => {
   const { t, language, setLanguage } = useI18n();
 
+  const [localHasSuperAdmin, setLocalHasSuperAdmin] = useState(hasSuperAdmin);
+
+  useEffect(() => {
+    setLocalHasSuperAdmin(hasSuperAdmin);
+  }, [hasSuperAdmin]);
+
   // 'landing' shows the full-bleed hero page matching lovable.app
   // 'auth' shows the split sign-in / register view matching lovable.app/auth
   const [view, setView] = useState<'landing' | 'auth'>('landing');
@@ -136,18 +142,42 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess }) =>
     setIsSubmitting(true);
 
     try {
-      if (!hasSuperAdmin) {
+      if (!localHasSuperAdmin) {
         // First-time setup
-        const res = await api.post('/auth/setup-admin', {
-          email: email.trim(),
-          password,
-          displayName: displayName.trim(),
-        });
-        if (res.token) {
-          localStorage.setItem('tripmates_token', res.token);
+        try {
+          const res = await api.post('/auth/setup-admin', {
+            email: email.trim(),
+            password,
+            displayName: displayName.trim(),
+          });
+          if (res.token) {
+            localStorage.setItem('tripmates_token', res.token);
+          }
+          saveRememberedAccount(email, displayName);
+          onAuthSuccess(res);
+          return;
+        } catch (setupErr: any) {
+          if (setupErr.data?.error === 'SUPER_ADMIN_EXISTS' || setupErr.message?.includes('already exists')) {
+            setLocalHasSuperAdmin(true);
+            setTab('signin');
+            try {
+              const loginRes = await api.post('/auth/login', {
+                email: email.trim(),
+                password,
+              });
+              if (loginRes.token) {
+                localStorage.setItem('tripmates_token', loginRes.token);
+              }
+              saveRememberedAccount(email, displayName);
+              onAuthSuccess(loginRes);
+              return;
+            } catch {
+              setErrorMsg('A Super Admin already exists in the system. Please enter your password to sign in.');
+              return;
+            }
+          }
+          throw setupErr;
         }
-        saveRememberedAccount(email, displayName);
-        onAuthSuccess(res);
       } else if (tab === 'register') {
         const payload: any = {
           email: email.trim(),
@@ -633,7 +663,7 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess }) =>
             letterSpacing: '-0.025em',
             marginBottom: '0.35rem',
           }}>
-            {!hasSuperAdmin
+            {!localHasSuperAdmin
               ? t.appName
               : tab === 'signin'
               ? t.welcomeBack
@@ -645,7 +675,7 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess }) =>
             color: '#64748b',
             marginBottom: '1.5rem',
           }}>
-            {!hasSuperAdmin
+            {!localHasSuperAdmin
               ? t.initialSetupDesc
               : tab === 'signin'
               ? t.welcomeSubtitle
@@ -653,7 +683,7 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess }) =>
           </p>
 
           {/* First-time setup alert */}
-          {!hasSuperAdmin && (
+          {!localHasSuperAdmin && (
             <div style={{
               background: '#eff6ff',
               border: '1px solid #bfdbfe',
@@ -667,15 +697,36 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess }) =>
               alignItems: 'flex-start',
             }}>
               <Sparkles size={18} style={{ flexShrink: 0, marginTop: '2px', color: '#3b82f6' }} />
-              <div>
+              <div style={{ flex: 1 }}>
                 <strong>{t.initialSetupMode}</strong>
                 <p style={{ marginTop: '0.2rem', margin: 0 }}>{t.initialSetupDesc}</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLocalHasSuperAdmin(true);
+                    setTab('signin');
+                    setErrorMsg(null);
+                  }}
+                  style={{
+                    marginTop: '0.5rem',
+                    background: '#ffffff',
+                    border: '1px solid #93c5fd',
+                    color: '#1d4ed8',
+                    padding: '0.35rem 0.75rem',
+                    borderRadius: '6px',
+                    fontSize: '0.82rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Already configured? Sign in here →
+                </button>
               </div>
             </div>
           )}
 
           {/* Tab Switcher (if system is already initialized) */}
-          {hasSuperAdmin && (
+          {localHasSuperAdmin && (
             <div style={{
               display: 'grid',
               gridTemplateColumns: '1fr 1fr',
@@ -733,7 +784,7 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess }) =>
           )}
 
           {/* Remembered Accounts Section (Quick Login) */}
-          {hasSuperAdmin && tab === 'signin' && rememberedAccounts.length > 0 && (
+          {localHasSuperAdmin && tab === 'signin' && rememberedAccounts.length > 0 && (
             <div style={{
               marginBottom: '1.35rem',
               padding: '0.85rem',
@@ -863,7 +914,7 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess }) =>
           {/* Form */}
           <form onSubmit={handleSubmit} style={{ display: 'grid', gap: '1.1rem' }}>
             {/* If Registering with Invite Code */}
-            {tab === 'register' && hasSuperAdmin && (
+            {tab === 'register' && localHasSuperAdmin && (
               <div className="form-group" style={{ margin: 0 }}>
                 <label className="form-label">{t.invitationCodeOptional}</label>
                 <input
@@ -878,7 +929,7 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess }) =>
             )}
 
             {/* Display Name (if setup or registering) */}
-            {(!hasSuperAdmin || tab === 'register') && (
+            {(!localHasSuperAdmin || tab === 'register') && (
               <div className="form-group" style={{ margin: 0 }}>
                 <label className="form-label">{t.fullName}</label>
                 <input
@@ -970,7 +1021,7 @@ export const AuthScreen: React.FC<Props> = ({ hasSuperAdmin, onAuthSuccess }) =>
             >
               {isSubmitting
                 ? t.loading
-                : !hasSuperAdmin
+                : !localHasSuperAdmin
                 ? t.completeSetupLaunch
                 : tab === 'register'
                 ? t.registerAndJoinTrip

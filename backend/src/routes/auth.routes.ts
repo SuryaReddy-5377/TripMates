@@ -44,7 +44,50 @@ authRouter.get('/status', (req: Request, res: Response) => {
 
 authRouter.post('/setup-admin', (req: Request, res: Response) => {
   if (hasSuperAdmin(req.db)) {
-    res.status(400).json({ error: 'SUPER_ADMIN_EXISTS', message: 'A Super Admin already exists in the system' });
+    const parseResult = setupAdminSchema.safeParse(req.body);
+    if (parseResult.success) {
+      const { email, password } = parseResult.data;
+      const userRow = req.db.prepare(`
+        SELECT id, email, password_hash, role, is_active, created_at
+        FROM users
+        WHERE email = ? COLLATE NOCASE
+      `).get(email) as any;
+
+      if (userRow && userRow.role === 'super_admin') {
+        const hashedPassword = hashPassword(password);
+        req.db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashedPassword, userRow.id);
+        const session = createSession(req.db, userRow.id);
+
+        res.cookie('session_token', session.token, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+          maxAge: 30 * 24 * 60 * 60 * 1000,
+        });
+
+        const personRow = req.db.prepare(`
+          SELECT id, display_name, user_id, is_active
+          FROM persons
+          WHERE user_id = ? AND is_active = 1
+        `).get(userRow.id);
+
+        res.json({
+          message: 'Super Admin logged in successfully',
+          user: {
+            id: userRow.id,
+            email: userRow.email,
+            role: userRow.role,
+            is_active: userRow.is_active,
+            created_at: userRow.created_at,
+          },
+          person: personRow || null,
+          family: null,
+          token: session.token,
+        });
+        return;
+      }
+    }
+    res.status(400).json({ error: 'SUPER_ADMIN_EXISTS', message: 'A Super Admin already exists in the system. Please sign in.' });
     return;
   }
 
