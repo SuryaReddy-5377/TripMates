@@ -41,6 +41,8 @@ export const config = {
   port: Number(process.env.PORT || 4000),
   databasePath: dbInfo.path,
   isPersistentDisk: dbInfo.isPersistentDisk,
+  databaseUrl: process.env.DATABASE_URL || '',
+  isPostgres: Boolean(process.env.DATABASE_URL),
   sessionSecret: process.env.SESSION_SECRET || 'tripmates-default-secret-' + crypto.randomBytes(16).toString('hex'),
   nodeEnv: process.env.NODE_ENV || 'development',
   corsOrigin: process.env.CORS_ORIGIN || true,

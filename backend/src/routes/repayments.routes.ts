@@ -30,21 +30,21 @@ const createRepaymentSchema = z.object({
   allow_advance: z.boolean().optional().default(false),
 });
 
-export function loadTripFinancialRecords(db: any, tripId: number) {
+export async function loadTripFinancialRecords(db: any, tripId: number) {
   // Load non-voided expenses
-  const expRows = db.prepare(`
+  const expRows = (await db.prepare(`
     SELECT id, total_paise, paid_by_type, paid_by_id
     FROM expenses
     WHERE trip_id = ? AND voided_at IS NULL
-  `).all(tripId) as Array<{ id: number; total_paise: number; paid_by_type: 'person' | 'family'; paid_by_id: number }>;
+  `).all(tripId)) as Array<{ id: number; total_paise: number; paid_by_type: 'person' | 'family'; paid_by_id: number }>;
 
   const expenses: Expense[] = [];
   for (const exp of expRows) {
-    const allocRows = db.prepare(`
+    const allocRows = (await db.prepare(`
       SELECT account_type, account_id, amount_paise
       FROM expense_allocations
       WHERE expense_id = ?
-    `).all(exp.id) as Array<{ account_type: 'person' | 'family'; account_id: number; amount_paise: number }>;
+    `).all(exp.id)) as Array<{ account_type: 'person' | 'family'; account_id: number; amount_paise: number }>;
 
     expenses.push({
       id: String(exp.id),
@@ -58,12 +58,12 @@ export function loadTripFinancialRecords(db: any, tripId: number) {
   }
 
   // Load repayments
-  const repRows = db.prepare(`
+  const repRows = (await db.prepare(`
     SELECT id, from_type, from_id, to_type, to_id, amount_paise, paid_on, reference, note, idempotency_key
     FROM repayments
     WHERE trip_id = ?
     ORDER BY paid_on ASC, id ASC
-  `).all(tripId) as Array<{
+  `).all(tripId)) as Array<{
     id: number;
     from_type: 'person' | 'family';
     from_id: number;
@@ -87,11 +87,11 @@ export function loadTripFinancialRecords(db: any, tripId: number) {
   }));
 
   // Load debt assumptions
-  const assumpRows = db.prepare(`
+  const assumpRows = (await db.prepare(`
     SELECT id, debtor_type, debtor_id, assumed_by_type, assumed_by_id, amount_paise
     FROM debt_assumptions
     WHERE trip_id = ?
-  `).all(tripId) as Array<{
+  `).all(tripId)) as Array<{
     id: number;
     debtor_type: 'person' | 'family';
     debtor_id: number;
@@ -111,10 +111,10 @@ export function loadTripFinancialRecords(db: any, tripId: number) {
 }
 
 // GET /api/trips/:tripId/repayments - List repayments
-repaymentsRouter.get('/', requireAuth, requireTripAccess('tripId'), (req: Request, res: Response) => {
+repaymentsRouter.get('/', requireAuth, requireTripAccess('tripId'), async (req: Request, res: Response) => {
   const tripId = req.trip!.id;
 
-  const repayments = req.db.prepare(`
+  const repayments = await req.db.prepare(`
     SELECT r.id, r.trip_id, r.from_type, r.from_id, r.to_type, r.to_id,
            r.amount_paise, r.paid_on, r.reference, r.note, r.idempotency_key,
            r.recorded_by, r.created_at,
@@ -137,7 +137,7 @@ repaymentsRouter.get('/', requireAuth, requireTripAccess('tripId'), (req: Reques
 });
 
 // POST /api/trips/:tripId/repayments - Record repayment with validation
-repaymentsRouter.post('/', requireAuth, requireTripAccess('tripId'), (req: Request, res: Response) => {
+repaymentsRouter.post('/', requireAuth, requireTripAccess('tripId'), async (req: Request, res: Response) => {
   const tripId = req.trip!.id;
   const parseResult = createRepaymentSchema.safeParse(req.body);
   if (!parseResult.success) {
@@ -168,7 +168,7 @@ repaymentsRouter.post('/', requireAuth, requireTripAccess('tripId'), (req: Reque
   }
 
   try {
-    const { expenses, repayments: existingRepayments, assumptions } = loadTripFinancialRecords(req.db, tripId);
+    const { expenses, repayments: existingRepayments, assumptions } = await loadTripFinancialRecords(req.db, tripId);
     const currentBalances = computeBalances(expenses, existingRepayments, assumptions);
 
     const newRepayment: Repayment = {
@@ -184,8 +184,8 @@ repaymentsRouter.post('/', requireAuth, requireTripAccess('tripId'), (req: Reque
     // Validate using existing tested financial engine
     validateRepayment(currentBalances, existingRepayments, newRepayment, { allowAdvance: input.allow_advance });
 
-    const saved = withTransaction(req.db, () => {
-      const repRes = req.db.prepare(`
+    const saved = await withTransaction(req.db, async () => {
+      const repRes = await req.db.prepare(`
         INSERT INTO repayments (
           trip_id, from_type, from_id, to_type, to_id,
           amount_paise, paid_on, reference, note, idempotency_key, recorded_by

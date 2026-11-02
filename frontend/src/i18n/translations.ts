@@ -152,6 +152,7 @@ export interface Translations {
   voidExpense: string;
   // Landing Page & Hero
   heroBadge: string;
+  privateInvitationBadge?: string;
   heroHeadline: string;
   heroSubtitle: string;
   signIn: string;
@@ -178,8 +179,10 @@ export interface Translations {
   registerAndJoinTrip: string;
   quickSignInHelper: string;
   rememberedOnDevice: string;
+  quickLogin?: string;
   removeAccount: string;
   useDifferentAccount: string;
+  useAnotherAccount?: string;
   privateSecurityFooter: string;
   selectRememberedAccount: string;
   passwordRequiredForLogin: string;
@@ -535,6 +538,7 @@ export const translations: Record<Language, Translations> = {
     voidExpense: 'Void Expense',
     // Landing Page & Hero
     heroBadge: 'Private · family invitation only',
+    privateInvitationBadge: 'Private · family invitation only',
     heroHeadline: 'Every trip, every photo, every rupee — together.',
     heroSubtitle: 'Plan our next getaway, keep photos in full original quality, and settle up fairly without the spreadsheet.',
     signIn: 'Sign in',
@@ -561,8 +565,10 @@ export const translations: Record<Language, Translations> = {
     registerAndJoinTrip: 'Register & Join Trip',
     quickSignInHelper: 'Quick Sign-In Helper',
     rememberedOnDevice: 'Remembered on this device',
+    quickLogin: 'Remembered on this device',
     removeAccount: 'Remove',
     useDifferentAccount: 'Use another account',
+    useAnotherAccount: 'Use another account',
     privateSecurityFooter: 'Only invited family members can join. Photos and expenses are visible only to people on each trip.',
     selectRememberedAccount: 'Select your remembered account and enter password to sign in.',
     passwordRequiredForLogin: 'Password is required to authenticate securely.',
@@ -916,6 +922,7 @@ export const translations: Record<Language, Translations> = {
     voidExpense: 'ఖర్చును రద్దు చేయి',
     // Landing Page & Hero
     heroBadge: 'ప్రైవేట్ · కుటుంబ ఆహ్వానంతో మాత్రమే',
+    privateInvitationBadge: 'ప్రైవేట్ · కుటుంబ ఆహ్వానంతో మాత్రమే',
     heroHeadline: 'ప్రతి ప్రయాణం, ప్రతి ఫోటో, ప్రతి రూపాయి — కలిసికట్టుగా.',
     heroSubtitle: 'మన తదుపరి విహారాన్ని ప్లాన్ చేయండి, ఫోటోలను ఒరిజినల్ క్వాలిటీలో దాచుకోండి, మరియు లెక్కలను న్యాయంగా పరిష్కరించుకోండి.',
     signIn: 'లాగిన్ చేయండి',
@@ -942,8 +949,10 @@ export const translations: Record<Language, Translations> = {
     registerAndJoinTrip: 'నమోదు చేసుకుని ప్రయాణంలో చేరండి',
     quickSignInHelper: 'త్వరిత లాగిన్ సహాయకం',
     rememberedOnDevice: 'ఈ పరికరంలో గుర్తుంచుకోబడింది',
+    quickLogin: 'ఈ పరికరంలో గుర్తుంచుకోబడింది',
     removeAccount: 'తొలగించు',
     useDifferentAccount: 'మరొక ఖాతాను ఉపయోగించండి',
+    useAnotherAccount: 'మరొక ఖాతాను ఉపయోగించండి',
     privateSecurityFooter: 'ఆహ్వానించబడిన కుటుంబ సభ్యులు మాత్రమే చేరగలరు. ఫోటోలు మరియు ఖర్చులు ప్రతి ప్రయాణంలో ఉన్నవారికి మాత్రమే కనిపిస్తాయి.',
     selectRememberedAccount: 'గుర్తుంచుకున్న ఖాతాను ఎంచుకుని పాస్‌వర్డ్ నమోదు చేసి లాగిన్ అవ్వండి.',
     passwordRequiredForLogin: 'సురక్షితంగా ధృవీకరించడానికి పాస్‌వర్డ్ తప్పనిసరి.',

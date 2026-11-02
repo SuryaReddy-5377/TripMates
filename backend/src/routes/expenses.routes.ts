@@ -254,11 +254,11 @@ expensesRouter.post('/preview', requireAuth, requireTripAccess('tripId'), (req: 
 });
 
 // GET /api/trips/:tripId/expenses - List trip expenses
-expensesRouter.get('/', requireAuth, requireTripAccess('tripId'), (req: Request, res: Response) => {
+expensesRouter.get('/', requireAuth, requireTripAccess('tripId'), async (req: Request, res: Response) => {
   const tripId = req.trip!.id;
   const userPersonId = req.person?.id || null;
 
-  const expenses = req.db.prepare(`
+  const expenses = await req.db.prepare(`
     SELECT e.id, e.trip_id, e.title, e.expense_date, e.category, e.currency,
            e.total_paise, e.paid_by_type, e.paid_by_id, e.accounting_mode,
            e.split_method, e.notes, e.receipt_total_paise, e.created_by,
@@ -287,11 +287,11 @@ expensesRouter.get('/', requireAuth, requireTripAccess('tripId'), (req: Request,
 });
 
 // GET /api/trips/:tripId/expenses/:expenseId - Detailed expense with items and allocations
-expensesRouter.get('/:expenseId', requireAuth, requireTripAccess('tripId'), (req: Request, res: Response) => {
+expensesRouter.get('/:expenseId', requireAuth, requireTripAccess('tripId'), async (req: Request, res: Response) => {
   const tripId = req.trip!.id;
   const expenseId = Number(req.params.expenseId);
 
-  const expense = req.db.prepare(`
+  const expense = await req.db.prepare(`
     SELECT e.*,
            CASE
              WHEN e.paid_by_type = 'person' THEN (SELECT display_name FROM persons WHERE id = e.paid_by_id)
@@ -306,21 +306,21 @@ expensesRouter.get('/:expenseId', requireAuth, requireTripAccess('tripId'), (req
     return;
   }
 
-  const items = req.db.prepare(`
+  const items = await req.db.prepare(`
     SELECT id, name, unit_price_paise, quantity, subtotal_paise, notes
     FROM expense_items
     WHERE expense_id = ?
     ORDER BY id ASC
   `).all(expenseId);
 
-  const charges = req.db.prepare(`
+  const charges = await req.db.prepare(`
     SELECT id, kind, label, signed_amount_paise
     FROM expense_charges
     WHERE expense_id = ?
     ORDER BY id ASC
   `).all(expenseId);
 
-  const allocations = req.db.prepare(`
+  const allocations = await req.db.prepare(`
     SELECT ea.id, ea.account_type, ea.account_id, ea.amount_paise,
            CASE
              WHEN ea.account_type = 'person' THEN (SELECT display_name FROM persons WHERE id = ea.account_id)
@@ -331,7 +331,7 @@ expensesRouter.get('/:expenseId', requireAuth, requireTripAccess('tripId'), (req
     ORDER BY ea.amount_paise DESC
   `).all(expenseId);
 
-  const familyBreakdowns = req.db.prepare(`
+  const familyBreakdowns = await req.db.prepare(`
     SELECT fsb.id, fsb.family_id, fsb.person_id, fsb.amount_paise,
            p.display_name as person_name,
            f.name as family_name
@@ -352,7 +352,7 @@ expensesRouter.get('/:expenseId', requireAuth, requireTripAccess('tripId'), (req
 });
 
 // POST /api/trips/:tripId/expenses - Save expense with safe transaction
-expensesRouter.post('/', requireAuth, requireTripAccess('tripId'), (req: Request, res: Response) => {
+expensesRouter.post('/', requireAuth, requireTripAccess('tripId'), async (req: Request, res: Response) => {
   const tripId = req.trip!.id;
   const parseResult = expenseInputSchema.safeParse(req.body);
   if (!parseResult.success) {
@@ -368,8 +368,8 @@ expensesRouter.post('/', requireAuth, requireTripAccess('tripId'), (req: Request
   try {
     const calc = calculateSplitResult(input);
 
-    const saved = withTransaction(req.db, () => {
-      const expRes = req.db.prepare(`
+    const saved = await withTransaction(req.db, async () => {
+      const expRes = await req.db.prepare(`
         INSERT INTO expenses (
           trip_id, title, expense_date, category, currency, total_paise,
           paid_by_type, paid_by_id, accounting_mode, split_method,
@@ -396,7 +396,7 @@ expensesRouter.post('/', requireAuth, requireTripAccess('tripId'), (req: Request
       if (input.split_method === 'itemized' && input.items) {
         for (const item of input.items) {
           const subtotal = item.unitPrice * item.quantity;
-          req.db.prepare(`
+          await req.db.prepare(`
             INSERT INTO expense_items (expense_id, name, unit_price_paise, quantity, subtotal_paise)
             VALUES (?, ?, ?, ?, ?)
           `).run(expenseId, item.name, item.unitPrice, item.quantity, subtotal);
@@ -406,7 +406,7 @@ expensesRouter.post('/', requireAuth, requireTripAccess('tripId'), (req: Request
           for (const charge of input.charges) {
             const isNegative = charge.kind === 'discount' || (charge.kind === 'adjustment' && charge.direction === 'subtract');
             const signedAmount = isNegative ? -charge.amount : charge.amount;
-            req.db.prepare(`
+            await req.db.prepare(`
               INSERT INTO expense_charges (expense_id, kind, label, signed_amount_paise)
               VALUES (?, ?, ?, ?)
             `).run(expenseId, charge.kind, charge.label || null, signedAmount);
@@ -417,7 +417,7 @@ expensesRouter.post('/', requireAuth, requireTripAccess('tripId'), (req: Request
       // Insert final allocations
       for (const alloc of calc.allocations) {
         const { type, id } = keyToAccount(alloc.id);
-        req.db.prepare(`
+        await req.db.prepare(`
           INSERT INTO expense_allocations (expense_id, account_type, account_id, amount_paise)
           VALUES (?, ?, ?, ?)
         `).run(expenseId, type, id, alloc.amount);
@@ -428,7 +428,7 @@ expensesRouter.post('/', requireAuth, requireTripAccess('tripId'), (req: Request
         const famAcct = keyToAccount(famKey);
         for (const m of members) {
           const memAcct = keyToAccount(m.id);
-          req.db.prepare(`
+          await req.db.prepare(`
             INSERT INTO family_share_breakdown (expense_id, family_id, person_id, amount_paise)
             VALUES (?, ?, ?, ?)
           `).run(expenseId, famAcct.id, memAcct.id, m.amount);
@@ -469,13 +469,13 @@ expensesRouter.post('/', requireAuth, requireTripAccess('tripId'), (req: Request
 });
 
 // DELETE /api/trips/:tripId/expenses/:expenseId - Void expense
-expensesRouter.delete('/:expenseId', requireAuth, requireTripAccess('tripId'), (req: Request, res: Response) => {
+expensesRouter.delete('/:expenseId', requireAuth, requireTripAccess('tripId'), async (req: Request, res: Response) => {
   const tripId = req.trip!.id;
   const expenseId = Number(req.params.expenseId);
 
-  const expense = req.db.prepare(`
+  const expense = (await req.db.prepare(`
     SELECT * FROM expenses WHERE id = ? AND trip_id = ?
-  `).get(expenseId, tripId) as any;
+  `).get(expenseId, tripId)) as any;
 
   if (!expense) {
     res.status(404).json({ error: 'NOT_FOUND', message: 'Expense not found' });
@@ -494,7 +494,7 @@ expensesRouter.delete('/:expenseId', requireAuth, requireTripAccess('tripId'), (
   }
 
   const voidedAt = new Date().toISOString();
-  req.db.prepare(`
+  await req.db.prepare(`
     UPDATE expenses SET voided_at = ? WHERE id = ?
   `).run(voidedAt, expenseId);
 

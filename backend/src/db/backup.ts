@@ -17,7 +17,7 @@ export interface DatabaseStats {
   sizeBytes: number;
 }
 
-export function getDatabaseStats(db: DatabaseSync): DatabaseStats {
+export function getDatabaseStats(db: any): DatabaseStats {
   const getCount = (table: string): number => {
     try {
       const row = db.prepare(`SELECT COUNT(*) as count FROM ${table}`).get() as { count: number };
@@ -51,7 +51,7 @@ export function getDatabaseStats(db: DatabaseSync): DatabaseStats {
   };
 }
 
-export function verifyDatabaseIntegrity(db: DatabaseSync): { ok: boolean; message: string; stats: DatabaseStats } {
+export function verifyDatabaseIntegrity(db: any): { ok: boolean; message: string; stats: DatabaseStats } {
   try {
     const integrityRows = db.prepare('PRAGMA integrity_check').all() as any[];
     const isIntegrityOk = integrityRows.length === 1 && integrityRows[0].integrity_check === 'ok';
@@ -79,7 +79,7 @@ export function verifyDatabaseIntegrity(db: DatabaseSync): { ok: boolean; messag
   }
 }
 
-export function createDatabaseBackup(db: DatabaseSync, customBackupDir?: string): { backupPath: string; stats: DatabaseStats } {
+export function createDatabaseBackup(db: any, customBackupDir?: string): { backupPath: string; stats: DatabaseStats } {
   if (config.databasePath === ':memory:') {
     throw new Error('Cannot backup an in-memory database');
   }

@@ -377,7 +377,7 @@ export const AuthScreen: React.FC<Props> = ({
               marginBottom: '1.5rem',
             }}>
               <ShieldCheck size={16} style={{ color: '#10b981' }} />
-              {t.privateInvitationBadge}
+              {t.heroBadge}
             </div>
 
             {/* Headline */}
@@ -828,7 +828,7 @@ export const AuthScreen: React.FC<Props> = ({
                 marginBottom: '0.5rem',
               }}>
                 <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  {t.quickLogin || 'Recent Accounts'}
+                  {t.rememberedOnDevice}
                 </span>
                 {selectedAccount && (
                   <button
@@ -844,7 +844,7 @@ export const AuthScreen: React.FC<Props> = ({
                       padding: 0,
                     }}
                   >
-                    {t.useAnotherAccount}
+                    {t.useDifferentAccount}
                   </button>
                 )}
               </div>

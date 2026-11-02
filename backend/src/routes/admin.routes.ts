@@ -20,7 +20,7 @@ const adminLoginSchema = z.object({
 // ============================================================================
 // 1. DEDICATED SUPER ADMIN LOGIN (FEATURE 5 & FEATURE 7)
 // ============================================================================
-adminRouter.post('/login', (req: Request, res: Response) => {
+adminRouter.post('/login', async (req: Request, res: Response) => {
   const ip = req.ip || req.socket.remoteAddress || 'unknown';
   const emailAttempt = req.body?.email?.trim()?.toLowerCase() || '';
   const rateLimitKey = `admin_login:${ip}:${emailAttempt}`;
@@ -46,11 +46,11 @@ adminRouter.post('/login', (req: Request, res: Response) => {
   const { email, password } = parseResult.data;
   const cleanEmail = email.trim().toLowerCase();
 
-  const userRow = req.db.prepare(`
+  const userRow = (await req.db.prepare(`
     SELECT id, email, password_hash, role, is_active, created_at
     FROM users
     WHERE email = ? COLLATE NOCASE
-  `).get(cleanEmail) as { id: number; email: string; password_hash: string; role: string; is_active: number; created_at: string } | undefined;
+  `).get(cleanEmail)) as { id: number; email: string; password_hash: string; role: string; is_active: number; created_at: string } | undefined;
 
   // Verify user exists and is active
   if (!userRow || userRow.is_active !== 1) {
@@ -62,7 +62,7 @@ adminRouter.post('/login', (req: Request, res: Response) => {
   // Security: strictly require role === 'super_admin' on this dedicated login portal
   if (userRow.role !== 'super_admin') {
     recordFailedAttempt(rateLimitKey);
-    recordAuditLog(req.db, userRow.id, 'UNAUTHORIZED_ADMIN_LOGIN_ATTEMPT', 'users', userRow.id, null, {
+    await recordAuditLog(req.db, userRow.id, 'UNAUTHORIZED_ADMIN_LOGIN_ATTEMPT', 'users', userRow.id, null, {
       attempted_email: cleanEmail,
       actual_role: userRow.role,
       ip,
@@ -88,7 +88,7 @@ adminRouter.post('/login', (req: Request, res: Response) => {
   // Clear failed rate limit attempts on success
   clearRateLimit(rateLimitKey);
 
-  const session = createSession(req.db, userRow.id);
+  const session = await createSession(req.db, userRow.id);
 
   res.cookie('session_token', session.token, {
     httpOnly: true,
@@ -97,13 +97,13 @@ adminRouter.post('/login', (req: Request, res: Response) => {
     maxAge: 30 * 24 * 60 * 60 * 1000,
   });
 
-  const personRow = req.db.prepare(`
+  const personRow = await req.db.prepare(`
     SELECT id, display_name, user_id, is_active
     FROM persons
     WHERE user_id = ? AND is_active = 1
   `).get(userRow.id);
 
-  recordAuditLog(req.db, userRow.id, 'SUPER_ADMIN_LOGIN', 'users', userRow.id, null, { ip });
+  await recordAuditLog(req.db, userRow.id, 'SUPER_ADMIN_LOGIN', 'users', userRow.id, null, { ip });
 
   res.json({
     message: 'Super Admin authentication successful',
@@ -127,37 +127,37 @@ adminRouter.use(requireAuth, requireRole('super_admin'));
 // ----------------------------------------------------------------------------
 // A. OVERVIEW STATS (FEATURE 6.A) - CALCULATED FROM ACTUAL DB
 // ----------------------------------------------------------------------------
-adminRouter.get('/overview', (req: Request, res: Response) => {
+adminRouter.get('/overview', async (req: Request, res: Response) => {
   const db = req.db;
 
-  const totalFamilies = (db.prepare('SELECT count(*) as count FROM families').get() as { count: number }).count;
-  const totalUsers = (db.prepare('SELECT count(*) as count FROM users').get() as { count: number }).count;
-  const activeUsers = (db.prepare('SELECT count(*) as count FROM users WHERE is_active = 1').get() as { count: number }).count;
-  const totalMemberships = (db.prepare('SELECT count(*) as count FROM family_memberships WHERE left_at IS NULL').get() as { count: number }).count;
+  const totalFamilies = ((await db.prepare('SELECT count(*) as count FROM families').get()) as { count: number }).count;
+  const totalUsers = ((await db.prepare('SELECT count(*) as count FROM users').get()) as { count: number }).count;
+  const activeUsers = ((await db.prepare('SELECT count(*) as count FROM users WHERE is_active = 1').get()) as { count: number }).count;
+  const totalMemberships = ((await db.prepare('SELECT count(*) as count FROM family_memberships WHERE left_at IS NULL').get()) as { count: number }).count;
 
-  const totalTrips = (db.prepare('SELECT count(*) as count FROM trips').get() as { count: number }).count;
-  const upcomingTrips = (db.prepare("SELECT count(*) as count FROM trips WHERE status = 'upcoming'").get() as { count: number }).count;
-  const ongoingTrips = (db.prepare("SELECT count(*) as count FROM trips WHERE status = 'ongoing'").get() as { count: number }).count;
-  const completedTrips = (db.prepare("SELECT count(*) as count FROM trips WHERE status = 'completed'").get() as { count: number }).count;
-  const planningTrips = (db.prepare("SELECT count(*) as count FROM trips WHERE status = 'planning'").get() as { count: number }).count;
+  const totalTrips = ((await db.prepare('SELECT count(*) as count FROM trips').get()) as { count: number }).count;
+  const upcomingTrips = ((await db.prepare("SELECT count(*) as count FROM trips WHERE status = 'upcoming'").get()) as { count: number }).count;
+  const ongoingTrips = ((await db.prepare("SELECT count(*) as count FROM trips WHERE status = 'ongoing'").get()) as { count: number }).count;
+  const completedTrips = ((await db.prepare("SELECT count(*) as count FROM trips WHERE status = 'completed'").get()) as { count: number }).count;
+  const planningTrips = ((await db.prepare("SELECT count(*) as count FROM trips WHERE status = 'planning'").get()) as { count: number }).count;
 
-  const expenseStats = db.prepare(`
+  const expenseStats = (await db.prepare(`
     SELECT count(*) as count, coalesce(sum(total_paise), 0) as total_paise
     FROM expenses
     WHERE voided_at IS NULL
-  `).get() as { count: number; total_paise: number };
+  `).get()) as { count: number; total_paise: number };
 
-  const repaymentStats = db.prepare(`
+  const repaymentStats = (await db.prepare(`
     SELECT count(*) as count, coalesce(sum(amount_paise), 0) as total_paise
     FROM repayments
-  `).get() as { count: number; total_paise: number };
+  `).get()) as { count: number; total_paise: number };
 
   // Calculate outstanding balances across active trips
-  const activeTripRows = db.prepare(`SELECT id FROM trips WHERE status != 'completed'`).all() as Array<{ id: number }>;
+  const activeTripRows = (await db.prepare(`SELECT id FROM trips WHERE status != 'completed'`).all()) as Array<{ id: number }>;
   let totalOutstandingPaise = 0;
   for (const t of activeTripRows) {
     try {
-      const { expenses, repayments, assumptions } = loadTripFinancialRecords(db, t.id);
+      const { expenses, repayments, assumptions } = await loadTripFinancialRecords(db, t.id);
       const balances = computeBalances(expenses, repayments, assumptions);
       for (const b of Object.values(balances)) {
         if (b.net > 0) {
@@ -170,7 +170,7 @@ adminRouter.get('/overview', (req: Request, res: Response) => {
   }
 
   // Recent activity from audit log
-  const recentActivity = db.prepare(`
+  const recentActivity = await db.prepare(`
     SELECT al.id, al.action, al.entity, al.entity_id, al.created_at,
            u.email as actor_email,
            p.display_name as actor_name
@@ -205,7 +205,7 @@ adminRouter.get('/overview', (req: Request, res: Response) => {
 // ----------------------------------------------------------------------------
 // B. FAMILY MANAGEMENT (FEATURE 6.B)
 // ----------------------------------------------------------------------------
-adminRouter.get('/families', (req: Request, res: Response) => {
+adminRouter.get('/families', async (req: Request, res: Response) => {
   const search = req.query.search ? `%${String(req.query.search).trim()}%` : null;
 
   let query = `
@@ -227,26 +227,26 @@ adminRouter.get('/families', (req: Request, res: Response) => {
 
   query += ` ORDER BY f.created_at DESC`;
 
-  const families = req.db.prepare(query).all(...params);
+  const families = await req.db.prepare(query).all(...params);
   res.json(families);
 });
 
-adminRouter.get('/families/:id', (req: Request, res: Response) => {
+adminRouter.get('/families/:id', async (req: Request, res: Response) => {
   const familyId = Number(req.params.id);
-  const family = req.db.prepare(`
+  const family = (await req.db.prepare(`
     SELECT f.*, u.email as admin_email, p.display_name as admin_name
     FROM families f
     LEFT JOIN users u ON f.admin_user_id = u.id
     LEFT JOIN persons p ON p.user_id = u.id
     WHERE f.id = ?
-  `).get(familyId) as any;
+  `).get(familyId)) as any;
 
   if (!family) {
     res.status(404).json({ error: 'NOT_FOUND', message: 'Family not found' });
     return;
   }
 
-  const members = req.db.prepare(`
+  const members = await req.db.prepare(`
     SELECT fm.id as membership_id, fm.joined_at, fm.left_at,
            p.id as person_id, p.display_name, p.is_active as person_active,
            u.id as user_id, u.email, u.role
@@ -257,7 +257,7 @@ adminRouter.get('/families/:id', (req: Request, res: Response) => {
     ORDER BY fm.left_at IS NULL DESC, p.display_name ASC
   `).all(familyId);
 
-  const trips = req.db.prepare(`
+  const trips = await req.db.prepare(`
     SELECT t.id, t.name, t.destination, t.start_date, t.end_date, t.status, t.is_private,
            (SELECT coalesce(sum(e.total_paise), 0) FROM expenses e WHERE e.trip_id = t.id AND e.voided_at IS NULL) as total_spent_paise
     FROM trip_families tf
@@ -278,7 +278,7 @@ const createFamilySchema = z.object({
   admin_user_id: z.number().int().positive().optional().nullable(),
 });
 
-adminRouter.post('/families', (req: Request, res: Response) => {
+adminRouter.post('/families', async (req: Request, res: Response) => {
   const parseResult = createFamilySchema.safeParse(req.body);
   if (!parseResult.success) {
     res.status(400).json({ error: 'VALIDATION_ERROR', details: parseResult.error.format() });
@@ -286,13 +286,13 @@ adminRouter.post('/families', (req: Request, res: Response) => {
   }
 
   const { name, admin_user_id } = parseResult.data;
-  const resId = req.db.prepare(`
+  const resId = await req.db.prepare(`
     INSERT INTO families (name, admin_user_id, is_active)
     VALUES (?, ?, 1)
   `).run(name.trim(), admin_user_id || null);
 
   const familyId = Number(resId.lastInsertRowid);
-  recordAuditLog(req.db, req.user!.id, 'ADMIN_CREATE_FAMILY', 'families', familyId, null, { name, admin_user_id });
+  await recordAuditLog(req.db, req.user!.id, 'ADMIN_CREATE_FAMILY', 'families', familyId, null, { name, admin_user_id });
 
   res.status(201).json({ id: familyId, name, admin_user_id });
 });
@@ -303,9 +303,9 @@ const editFamilySchema = z.object({
   is_active: z.union([z.boolean(), z.number()]).optional(),
 });
 
-adminRouter.patch('/families/:id', (req: Request, res: Response) => {
+adminRouter.patch('/families/:id', async (req: Request, res: Response) => {
   const familyId = Number(req.params.id);
-  const existing = req.db.prepare('SELECT * FROM families WHERE id = ?').get(familyId) as any;
+  const existing = (await req.db.prepare('SELECT * FROM families WHERE id = ?').get(familyId)) as any;
   if (!existing) {
     res.status(404).json({ error: 'NOT_FOUND', message: 'Family not found' });
     return;
@@ -322,11 +322,11 @@ adminRouter.patch('/families/:id', (req: Request, res: Response) => {
   const updatedAdmin = data.admin_user_id !== undefined ? data.admin_user_id : existing.admin_user_id;
   const updatedActive = data.is_active !== undefined ? (Boolean(data.is_active) ? 1 : 0) : existing.is_active;
 
-  req.db.prepare(`
+  await req.db.prepare(`
     UPDATE families SET name = ?, admin_user_id = ?, is_active = ? WHERE id = ?
   `).run(updatedName, updatedAdmin, updatedActive, familyId);
 
-  recordAuditLog(req.db, req.user!.id, 'ADMIN_UPDATE_FAMILY', 'families', familyId, existing, {
+  await recordAuditLog(req.db, req.user!.id, 'ADMIN_UPDATE_FAMILY', 'families', familyId, existing, {
     name: updatedName,
     admin_user_id: updatedAdmin,
     is_active: updatedActive,
@@ -336,7 +336,7 @@ adminRouter.patch('/families/:id', (req: Request, res: Response) => {
 });
 
 // Add member to family
-adminRouter.post('/families/:id/members', (req: Request, res: Response) => {
+adminRouter.post('/families/:id/members', async (req: Request, res: Response) => {
   const familyId = Number(req.params.id);
   const { person_id } = req.body;
   const personId = Number(person_id);
@@ -347,36 +347,36 @@ adminRouter.post('/families/:id/members', (req: Request, res: Response) => {
   }
 
   // Deactivate any existing active membership for this person
-  req.db.prepare(`
+  await req.db.prepare(`
     UPDATE family_memberships SET left_at = datetime('now') WHERE person_id = ? AND left_at IS NULL
   `).run(personId);
 
-  const resId = req.db.prepare(`
+  const resId = await req.db.prepare(`
     INSERT INTO family_memberships (family_id, person_id) VALUES (?, ?)
   `).run(familyId, personId);
 
-  recordAuditLog(req.db, req.user!.id, 'ADMIN_ADD_FAMILY_MEMBER', 'family_memberships', Number(resId.lastInsertRowid), null, { familyId, personId });
+  await recordAuditLog(req.db, req.user!.id, 'ADMIN_ADD_FAMILY_MEMBER', 'family_memberships', Number(resId.lastInsertRowid), null, { familyId, personId });
   res.status(201).json({ message: 'Member added to family', id: Number(resId.lastInsertRowid) });
 });
 
 // Remove member from family
-adminRouter.delete('/families/:id/members/:personId', (req: Request, res: Response) => {
+adminRouter.delete('/families/:id/members/:personId', async (req: Request, res: Response) => {
   const familyId = Number(req.params.id);
   const personId = Number(req.params.personId);
 
-  req.db.prepare(`
+  await req.db.prepare(`
     UPDATE family_memberships SET left_at = datetime('now')
     WHERE family_id = ? AND person_id = ? AND left_at IS NULL
   `).run(familyId, personId);
 
-  recordAuditLog(req.db, req.user!.id, 'ADMIN_REMOVE_FAMILY_MEMBER', 'family_memberships', null, { familyId, personId }, { left_at: new Date().toISOString() });
+  await recordAuditLog(req.db, req.user!.id, 'ADMIN_REMOVE_FAMILY_MEMBER', 'family_memberships', null, { familyId, personId }, { left_at: new Date().toISOString() });
   res.json({ message: 'Member removed from family' });
 });
 
 // ----------------------------------------------------------------------------
 // C. MEMBER MANAGEMENT (FEATURE 6.C)
 // ----------------------------------------------------------------------------
-adminRouter.get('/members', (req: Request, res: Response) => {
+adminRouter.get('/members', async (req: Request, res: Response) => {
   const search = req.query.search ? `%${String(req.query.search).trim()}%` : null;
 
   let query = `
@@ -398,13 +398,13 @@ adminRouter.get('/members', (req: Request, res: Response) => {
 
   query += ` ORDER BY u.created_at DESC`;
 
-  const users = req.db.prepare(query).all(...params);
+  const users = await req.db.prepare(query).all(...params);
   // Never expose passwords or session tokens
   res.json(users);
 });
 
 // Activate or deactivate user account through controlled process
-adminRouter.patch('/members/:userId/status', (req: Request, res: Response) => {
+adminRouter.patch('/members/:userId/status', async (req: Request, res: Response) => {
   const targetUserId = Number(req.params.userId);
   const { is_active } = req.body;
 
@@ -421,21 +421,21 @@ adminRouter.patch('/members/:userId/status', (req: Request, res: Response) => {
     return;
   }
 
-  const targetUser = req.db.prepare('SELECT id, email, role, is_active FROM users WHERE id = ?').get(targetUserId) as any;
+  const targetUser = (await req.db.prepare('SELECT id, email, role, is_active FROM users WHERE id = ?').get(targetUserId)) as any;
   if (!targetUser) {
     res.status(404).json({ error: 'NOT_FOUND', message: 'User not found' });
     return;
   }
 
-  withTransaction(req.db, () => {
-    req.db.prepare('UPDATE users SET is_active = ? WHERE id = ?').run(activeNum, targetUserId);
+  await withTransaction(req.db, async () => {
+    await req.db.prepare('UPDATE users SET is_active = ? WHERE id = ?').run(activeNum, targetUserId);
 
     // If deactivating, invalidate all active sessions for this user
     if (activeNum === 0) {
-      revokeAllUserSessions(req.db, targetUserId);
+      await revokeAllUserSessions(req.db, targetUserId);
     }
 
-    recordAuditLog(req.db, req.user!.id, 'ADMIN_CHANGE_USER_STATUS', 'users', targetUserId, { is_active: targetUser.is_active }, { is_active: activeNum });
+    await recordAuditLog(req.db, req.user!.id, 'ADMIN_CHANGE_USER_STATUS', 'users', targetUserId, { is_active: targetUser.is_active }, { is_active: activeNum });
   });
 
   res.json({
@@ -446,7 +446,7 @@ adminRouter.patch('/members/:userId/status', (req: Request, res: Response) => {
 });
 
 // Remove or deactivate user account safely without damaging financial history
-adminRouter.delete('/members/:userId', (req: Request, res: Response) => {
+adminRouter.delete('/members/:userId', async (req: Request, res: Response) => {
   const targetUserId = Number(req.params.userId);
 
   if (!targetUserId || isNaN(targetUserId)) {
@@ -460,7 +460,7 @@ adminRouter.delete('/members/:userId', (req: Request, res: Response) => {
     return;
   }
 
-  const targetUser = req.db.prepare('SELECT id, email, role, is_active FROM users WHERE id = ?').get(targetUserId) as any;
+  const targetUser = (await req.db.prepare('SELECT id, email, role, is_active FROM users WHERE id = ?').get(targetUserId)) as any;
   if (!targetUser) {
     res.status(404).json({ error: 'NOT_FOUND', message: 'User not found' });
     return;
@@ -468,7 +468,7 @@ adminRouter.delete('/members/:userId', (req: Request, res: Response) => {
 
   // Prevent removing the last remaining active super admin
   if (targetUser.role === 'super_admin') {
-    const adminCount = (req.db.prepare(`SELECT count(*) as count FROM users WHERE role = 'super_admin' AND is_active = 1`).get() as { count: number }).count;
+    const adminCount = ((await req.db.prepare(`SELECT count(*) as count FROM users WHERE role = 'super_admin' AND is_active = 1`).get()) as { count: number }).count;
     if (adminCount <= 1) {
       res.status(400).json({ error: 'LAST_ADMIN_PREVENTED', message: 'Cannot remove the last remaining active Super Administrator.' });
       return;
@@ -476,17 +476,17 @@ adminRouter.delete('/members/:userId', (req: Request, res: Response) => {
   }
 
   // Get associated person ID
-  const person = req.db.prepare('SELECT id, display_name FROM persons WHERE user_id = ?').get(targetUserId) as { id: number; display_name: string } | undefined;
+  const person = (await req.db.prepare('SELECT id, display_name FROM persons WHERE user_id = ?').get(targetUserId)) as { id: number; display_name: string } | undefined;
   const personId = person ? person.id : null;
 
   // Check for existing financial records or trip records
   let hasFinancialRecords = false;
   if (personId) {
-    const expensePayerCount = (req.db.prepare(`SELECT count(*) as count FROM expenses WHERE paid_by_type = 'person' AND paid_by_id = ?`).get(personId) as { count: number }).count;
-    const allocationCount = (req.db.prepare(`SELECT count(*) as count FROM expense_allocations WHERE account_type = 'person' AND account_id = ?`).get(personId) as { count: number }).count;
-    const repaymentCount = (req.db.prepare(`SELECT count(*) as count FROM repayments WHERE (from_type = 'person' AND from_id = ?) OR (to_type = 'person' AND to_id = ?)`).get(personId, personId) as { count: number }).count;
-    const creatorExpenseCount = (req.db.prepare(`SELECT count(*) as count FROM expenses WHERE created_by = ?`).get(targetUserId) as { count: number }).count;
-    const creatorTripCount = (req.db.prepare(`SELECT count(*) as count FROM trips WHERE created_by = ?`).get(targetUserId) as { count: number }).count;
+    const expensePayerCount = ((await req.db.prepare(`SELECT count(*) as count FROM expenses WHERE paid_by_type = 'person' AND paid_by_id = ?`).get(personId)) as { count: number }).count;
+    const allocationCount = ((await req.db.prepare(`SELECT count(*) as count FROM expense_allocations WHERE account_type = 'person' AND account_id = ?`).get(personId)) as { count: number }).count;
+    const repaymentCount = ((await req.db.prepare(`SELECT count(*) as count FROM repayments WHERE (from_type = 'person' AND from_id = ?) OR (to_type = 'person' AND to_id = ?)`).get(personId, personId)) as { count: number }).count;
+    const creatorExpenseCount = ((await req.db.prepare(`SELECT count(*) as count FROM expenses WHERE created_by = ?`).get(targetUserId)) as { count: number }).count;
+    const creatorTripCount = ((await req.db.prepare(`SELECT count(*) as count FROM trips WHERE created_by = ?`).get(targetUserId)) as { count: number }).count;
 
     if (expensePayerCount > 0 || allocationCount > 0 || repaymentCount > 0 || creatorExpenseCount > 0 || creatorTripCount > 0) {
       hasFinancialRecords = true;
@@ -495,14 +495,14 @@ adminRouter.delete('/members/:userId', (req: Request, res: Response) => {
 
   if (hasFinancialRecords) {
     // Financial records exist: deactivate account, revoke active sessions and family memberships to preserve historical integrity
-    withTransaction(req.db, () => {
-      req.db.prepare('UPDATE users SET is_active = 0 WHERE id = ?').run(targetUserId);
+    await withTransaction(req.db, async () => {
+      await req.db.prepare('UPDATE users SET is_active = 0 WHERE id = ?').run(targetUserId);
       if (personId) {
-        req.db.prepare(`UPDATE family_memberships SET left_at = datetime('now') WHERE person_id = ? AND left_at IS NULL`).run(personId);
+        await req.db.prepare(`UPDATE family_memberships SET left_at = datetime('now') WHERE person_id = ? AND left_at IS NULL`).run(personId);
       }
-      revokeAllUserSessions(req.db, targetUserId);
+      await revokeAllUserSessions(req.db, targetUserId);
 
-      recordAuditLog(req.db, req.user!.id, 'ADMIN_DEACTIVATE_USER_PRESERVE_FINANCIALS', 'users', targetUserId, {
+      await recordAuditLog(req.db, req.user!.id, 'ADMIN_DEACTIVATE_USER_PRESERVE_FINANCIALS', 'users', targetUserId, {
         email: targetUser.email,
         is_active: targetUser.is_active,
       }, {
@@ -520,18 +520,18 @@ adminRouter.delete('/members/:userId', (req: Request, res: Response) => {
   }
 
   // Zero financial records: safe to permanently delete user and related non-financial references
-  withTransaction(req.db, () => {
+  await withTransaction(req.db, async () => {
     if (personId) {
-      req.db.prepare('DELETE FROM family_memberships WHERE person_id = ?').run(personId);
-      req.db.prepare('DELETE FROM trip_participants WHERE person_id = ?').run(personId);
-      req.db.prepare('DELETE FROM persons WHERE id = ?').run(personId);
+      await req.db.prepare('DELETE FROM family_memberships WHERE person_id = ?').run(personId);
+      await req.db.prepare('DELETE FROM trip_participants WHERE person_id = ?').run(personId);
+      await req.db.prepare('DELETE FROM persons WHERE id = ?').run(personId);
     }
-    req.db.prepare('DELETE FROM notifications WHERE user_id = ?').run(targetUserId);
-    req.db.prepare('DELETE FROM notification_preferences WHERE user_id = ?').run(targetUserId);
-    req.db.prepare('DELETE FROM sessions WHERE user_id = ?').run(targetUserId);
-    req.db.prepare('DELETE FROM users WHERE id = ?').run(targetUserId);
+    await req.db.prepare('DELETE FROM notifications WHERE user_id = ?').run(targetUserId);
+    await req.db.prepare('DELETE FROM notification_preferences WHERE user_id = ?').run(targetUserId);
+    await req.db.prepare('DELETE FROM sessions WHERE user_id = ?').run(targetUserId);
+    await req.db.prepare('DELETE FROM users WHERE id = ?').run(targetUserId);
 
-    recordAuditLog(req.db, req.user!.id, 'ADMIN_PERMANENT_DELETE_USER', 'users', targetUserId, {
+    await recordAuditLog(req.db, req.user!.id, 'ADMIN_PERMANENT_DELETE_USER', 'users', targetUserId, {
       email: targetUser.email,
     }, null);
   });
@@ -546,7 +546,7 @@ adminRouter.delete('/members/:userId', (req: Request, res: Response) => {
 // ----------------------------------------------------------------------------
 // D. COMPLETE TRIP MANAGEMENT (FEATURE 6.D)
 // ----------------------------------------------------------------------------
-adminRouter.get('/trips', (req: Request, res: Response) => {
+adminRouter.get('/trips', async (req: Request, res: Response) => {
   const search = req.query.search ? `%${String(req.query.search).trim()}%` : null;
   const status = req.query.status ? String(req.query.status).trim() : null;
 
@@ -574,19 +574,19 @@ adminRouter.get('/trips', (req: Request, res: Response) => {
 
   query += ` ORDER BY t.created_at DESC`;
 
-  const trips = req.db.prepare(query).all(...params);
+  const trips = await req.db.prepare(query).all(...params);
   res.json(trips);
 });
 
 // Detailed trip inspector for Super Admin
-adminRouter.get('/trips/:id', (req: Request, res: Response) => {
+adminRouter.get('/trips/:id', async (req: Request, res: Response) => {
   const tripId = Number(req.params.id);
-  const trip = req.db.prepare(`
+  const trip = (await req.db.prepare(`
     SELECT t.*, u.email as creator_email
     FROM trips t
     LEFT JOIN users u ON t.created_by = u.id
     WHERE t.id = ?
-  `).get(tripId) as any;
+  `).get(tripId)) as any;
 
   if (!trip) {
     res.status(404).json({ error: 'NOT_FOUND', message: 'Trip not found' });
@@ -594,7 +594,7 @@ adminRouter.get('/trips/:id', (req: Request, res: Response) => {
   }
 
   // Families
-  const families = req.db.prepare(`
+  const families = await req.db.prepare(`
     SELECT f.id, f.name, u.email as admin_email
     FROM trip_families tf
     JOIN families f ON tf.family_id = f.id
@@ -603,7 +603,7 @@ adminRouter.get('/trips/:id', (req: Request, res: Response) => {
   `).all(tripId);
 
   // Participants & Attendance
-  const participants = req.db.prepare(`
+  const participants = await req.db.prepare(`
     SELECT p.id as person_id, p.display_name, tp.attendance, tp.responded_at,
            f.id as family_id, f.name as family_name,
            u.id as user_id, u.email
@@ -617,7 +617,7 @@ adminRouter.get('/trips/:id', (req: Request, res: Response) => {
   `).all(tripId);
 
   // Invitations
-  const invitations = req.db.prepare(`
+  const invitations = await req.db.prepare(`
     SELECT i.*, f.name as family_name, p.display_name as person_name, u.email as creator_email
     FROM invitations i
     LEFT JOIN families f ON i.family_id = f.id
@@ -627,7 +627,7 @@ adminRouter.get('/trips/:id', (req: Request, res: Response) => {
   `).all(tripId);
 
   // Expenses with items and allocations
-  const expenses = req.db.prepare(`
+  const expenses = (await req.db.prepare(`
     SELECT e.*,
            CASE
              WHEN e.paid_by_type = 'person' THEN (SELECT display_name FROM persons WHERE id = e.paid_by_id)
@@ -638,12 +638,12 @@ adminRouter.get('/trips/:id', (req: Request, res: Response) => {
     JOIN users u ON e.created_by = u.id
     WHERE e.trip_id = ?
     ORDER BY e.expense_date DESC, e.id DESC
-  `).all(tripId) as any[];
+  `).all(tripId)) as any[];
 
   for (const exp of expenses) {
-    exp.items = req.db.prepare('SELECT * FROM expense_items WHERE expense_id = ?').all(exp.id);
-    exp.charges = req.db.prepare('SELECT * FROM expense_charges WHERE expense_id = ?').all(exp.id);
-    exp.allocations = req.db.prepare(`
+    exp.items = await req.db.prepare('SELECT * FROM expense_items WHERE expense_id = ?').all(exp.id);
+    exp.charges = await req.db.prepare('SELECT * FROM expense_charges WHERE expense_id = ?').all(exp.id);
+    exp.allocations = await req.db.prepare(`
       SELECT ea.*,
              CASE
                WHEN ea.account_type = 'person' THEN (SELECT display_name FROM persons WHERE id = ea.account_id)
@@ -655,7 +655,7 @@ adminRouter.get('/trips/:id', (req: Request, res: Response) => {
   }
 
   // Repayments
-  const repayments = req.db.prepare(`
+  const repayments = await req.db.prepare(`
     SELECT r.*,
            CASE
              WHEN r.from_type = 'person' THEN (SELECT display_name FROM persons WHERE id = r.from_id)
@@ -675,14 +675,14 @@ adminRouter.get('/trips/:id', (req: Request, res: Response) => {
   // Balances
   let balances: any[] = [];
   try {
-    const { expenses: finExp, repayments: finRep, assumptions } = loadTripFinancialRecords(req.db, tripId);
+    const { expenses: finExp, repayments: finRep, assumptions } = await loadTripFinancialRecords(req.db, tripId);
     balances = Object.values(computeBalances(finExp, finRep, assumptions));
   } catch {
     // ignore
   }
 
   // Audit history
-  const auditLogs = req.db.prepare(`
+  const auditLogs = await req.db.prepare(`
     SELECT al.*, u.email as actor_email
     FROM audit_log al
     LEFT JOIN users u ON al.actor_user_id = u.id
@@ -708,7 +708,7 @@ adminRouter.get('/trips/:id', (req: Request, res: Response) => {
 // ----------------------------------------------------------------------------
 // E. EXPENSE AND SETTLEMENT MANAGEMENT (FEATURE 6.E)
 // ----------------------------------------------------------------------------
-adminRouter.get('/expenses', (req: Request, res: Response) => {
+adminRouter.get('/expenses', async (req: Request, res: Response) => {
   const search = req.query.search ? `%${String(req.query.search).trim()}%` : null;
   const tripId = req.query.tripId ? Number(req.query.tripId) : null;
 
@@ -740,14 +740,14 @@ adminRouter.get('/expenses', (req: Request, res: Response) => {
 
   query += ` ORDER BY e.expense_date DESC, e.id DESC LIMIT 100`;
 
-  const expenses = req.db.prepare(query).all(...params);
+  const expenses = await req.db.prepare(query).all(...params);
   res.json(expenses);
 });
 
 // Admin void expense
-adminRouter.post('/expenses/:id/void', (req: Request, res: Response) => {
+adminRouter.post('/expenses/:id/void', async (req: Request, res: Response) => {
   const expenseId = Number(req.params.id);
-  const expense = req.db.prepare('SELECT * FROM expenses WHERE id = ?').get(expenseId) as any;
+  const expense = (await req.db.prepare('SELECT * FROM expenses WHERE id = ?').get(expenseId)) as any;
 
   if (!expense) {
     res.status(404).json({ error: 'NOT_FOUND', message: 'Expense not found' });
@@ -760,9 +760,9 @@ adminRouter.post('/expenses/:id/void', (req: Request, res: Response) => {
   }
 
   const voidedAt = new Date().toISOString();
-  req.db.prepare('UPDATE expenses SET voided_at = ? WHERE id = ?').run(voidedAt, expenseId);
+  await req.db.prepare('UPDATE expenses SET voided_at = ? WHERE id = ?').run(voidedAt, expenseId);
 
-  recordAuditLog(req.db, req.user!.id, 'ADMIN_VOID_EXPENSE', 'expenses', expenseId, { voided_at: null }, { voided_at: voidedAt });
+  await recordAuditLog(req.db, req.user!.id, 'ADMIN_VOID_EXPENSE', 'expenses', expenseId, { voided_at: null }, { voided_at: voidedAt });
 
   res.json({ message: 'Expense voided by Super Admin', voided_at: voidedAt });
 });
@@ -770,7 +770,7 @@ adminRouter.post('/expenses/:id/void', (req: Request, res: Response) => {
 // ----------------------------------------------------------------------------
 // F. AUDIT LOGS (FEATURE 6.F)
 // ----------------------------------------------------------------------------
-adminRouter.get('/audit', (req: Request, res: Response) => {
+adminRouter.get('/audit', async (req: Request, res: Response) => {
   const limit = Math.min(100, Math.max(1, Number(req.query.limit || 50)));
   const offset = Math.max(0, Number(req.query.offset || 0));
   const entity = req.query.entity ? String(req.query.entity) : null;
@@ -800,8 +800,8 @@ adminRouter.get('/audit', (req: Request, res: Response) => {
   query += ` ORDER BY al.id DESC LIMIT ? OFFSET ?`;
   params.push(limit, offset);
 
-  const logs = req.db.prepare(query).all(...params);
-  const total = (req.db.prepare('SELECT count(*) as count FROM audit_log').get() as { count: number }).count;
+  const logs = await req.db.prepare(query).all(...params);
+  const total = ((await req.db.prepare('SELECT count(*) as count FROM audit_log').get()) as { count: number }).count;
 
   res.json({
     total,
@@ -818,8 +818,8 @@ adminRouter.get('/audit', (req: Request, res: Response) => {
 // ----------------------------------------------------------------------------
 // G. FAMILY INVITE CODES MANAGEMENT
 // ----------------------------------------------------------------------------
-adminRouter.get('/invite-codes', (req: Request, res: Response) => {
-  const codes = req.db.prepare(`
+adminRouter.get('/invite-codes', async (req: Request, res: Response) => {
+  const codes = await req.db.prepare(`
     SELECT fic.id, fic.code, fic.family_id, fic.max_uses, fic.uses_count,
            (fic.max_uses - fic.uses_count) as remaining_uses,
            fic.expires_at, fic.status, fic.created_at, fic.notes,
@@ -842,7 +842,7 @@ const createInviteCodeSchema = z.object({
   notes: z.string().trim().max(255).optional(),
 });
 
-adminRouter.post('/invite-codes', (req: Request, res: Response) => {
+adminRouter.post('/invite-codes', async (req: Request, res: Response) => {
   const parseResult = createInviteCodeSchema.safeParse(req.body);
   if (!parseResult.success) {
     res.status(400).json({ error: 'VALIDATION_ERROR', details: parseResult.error.format() });
@@ -858,7 +858,7 @@ adminRouter.post('/invite-codes', (req: Request, res: Response) => {
   }
 
   // Check code uniqueness
-  const existing = req.db.prepare('SELECT id FROM family_invite_codes WHERE code = ? COLLATE NOCASE').get(code);
+  const existing = await req.db.prepare('SELECT id FROM family_invite_codes WHERE code = ? COLLATE NOCASE').get(code);
   if (existing) {
     res.status(400).json({ error: 'CODE_EXISTS', message: 'An invite code with this text already exists. Please choose a unique code.' });
     return;
@@ -866,28 +866,28 @@ adminRouter.post('/invite-codes', (req: Request, res: Response) => {
 
   // If family_id provided, verify family exists
   if (data.family_id) {
-    const fam = req.db.prepare('SELECT id, name FROM families WHERE id = ?').get(data.family_id);
+    const fam = await req.db.prepare('SELECT id, name FROM families WHERE id = ?').get(data.family_id);
     if (!fam) {
       res.status(404).json({ error: 'FAMILY_NOT_FOUND', message: 'Target family does not exist.' });
       return;
     }
   }
 
-  const insertRes = req.db.prepare(`
+  const insertRes = await req.db.prepare(`
     INSERT INTO family_invite_codes (code, family_id, max_uses, uses_count, expires_at, status, created_by, notes)
     VALUES (?, ?, ?, 0, ?, 'active', ?, ?)
   `).run(code, data.family_id || null, data.max_uses, data.expires_at || null, req.user!.id, data.notes || null);
 
   const newId = Number(insertRes.lastInsertRowid);
 
-  recordAuditLog(req.db, req.user!.id, 'ADMIN_CREATE_FAMILY_INVITE_CODE', 'family_invite_codes', newId, null, {
+  await recordAuditLog(req.db, req.user!.id, 'ADMIN_CREATE_FAMILY_INVITE_CODE', 'family_invite_codes', newId, null, {
     code,
     family_id: data.family_id,
     max_uses: data.max_uses,
     expires_at: data.expires_at,
   });
 
-  const created = req.db.prepare(`
+  const created = await req.db.prepare(`
     SELECT fic.*, f.name as family_name
     FROM family_invite_codes fic
     LEFT JOIN families f ON fic.family_id = f.id
@@ -897,18 +897,18 @@ adminRouter.post('/invite-codes', (req: Request, res: Response) => {
   res.status(201).json(created);
 });
 
-adminRouter.post('/invite-codes/:id/revoke', (req: Request, res: Response) => {
+adminRouter.post('/invite-codes/:id/revoke', async (req: Request, res: Response) => {
   const codeId = Number(req.params.id);
-  const codeRow = req.db.prepare('SELECT * FROM family_invite_codes WHERE id = ?').get(codeId) as any;
+  const codeRow = (await req.db.prepare('SELECT * FROM family_invite_codes WHERE id = ?').get(codeId)) as any;
 
   if (!codeRow) {
     res.status(404).json({ error: 'NOT_FOUND', message: 'Invite code not found' });
     return;
   }
 
-  req.db.prepare(`UPDATE family_invite_codes SET status = 'revoked' WHERE id = ?`).run(codeId);
+  await req.db.prepare(`UPDATE family_invite_codes SET status = 'revoked' WHERE id = ?`).run(codeId);
 
-  recordAuditLog(req.db, req.user!.id, 'ADMIN_REVOKE_FAMILY_INVITE_CODE', 'family_invite_codes', codeId, {
+  await recordAuditLog(req.db, req.user!.id, 'ADMIN_REVOKE_FAMILY_INVITE_CODE', 'family_invite_codes', codeId, {
     status: codeRow.status,
   }, {
     status: 'revoked',
@@ -922,7 +922,7 @@ adminRouter.post('/invite-codes/:id/revoke', (req: Request, res: Response) => {
 // ==========================================
 
 // GET /api/admin/suggestions - List all submitted user suggestions
-adminRouter.get('/suggestions', (req: Request, res: Response) => {
+adminRouter.get('/suggestions', async (req: Request, res: Response) => {
   const status = req.query.status as string | undefined;
   let query = `
     SELECT s.*, u.email as user_account_email
@@ -936,12 +936,12 @@ adminRouter.get('/suggestions', (req: Request, res: Response) => {
   }
   query += ' ORDER BY s.created_at DESC';
 
-  const suggestions = req.db.prepare(query).all(...params);
+  const suggestions = await req.db.prepare(query).all(...params);
   res.json(suggestions);
 });
 
 // PATCH /api/admin/suggestions/:id - Update status (pending, reviewed, resolved) or admin notes
-adminRouter.patch('/suggestions/:id', (req: Request, res: Response) => {
+adminRouter.patch('/suggestions/:id', async (req: Request, res: Response) => {
   const id = Number(req.params.id);
   const updateSchema = z.object({
     status: z.enum(['pending', 'reviewed', 'resolved']).optional(),
@@ -953,7 +953,7 @@ adminRouter.patch('/suggestions/:id', (req: Request, res: Response) => {
     return;
   }
 
-  const current = req.db.prepare('SELECT * FROM suggestions WHERE id = ?').get(id) as any;
+  const current = (await req.db.prepare('SELECT * FROM suggestions WHERE id = ?').get(id)) as any;
   if (!current) {
     res.status(404).json({ error: 'NOT_FOUND', message: 'Suggestion not found' });
     return;
@@ -962,25 +962,25 @@ adminRouter.patch('/suggestions/:id', (req: Request, res: Response) => {
   const newStatus = parseResult.data.status || current.status;
   const newNotes = parseResult.data.admin_notes !== undefined ? parseResult.data.admin_notes : current.admin_notes;
 
-  req.db.prepare(`
+  await req.db.prepare(`
     UPDATE suggestions
     SET status = ?, admin_notes = ?, updated_at = datetime('now')
     WHERE id = ?
   `).run(newStatus, newNotes, id);
 
-  const updated = req.db.prepare('SELECT * FROM suggestions WHERE id = ?').get(id);
+  const updated = await req.db.prepare('SELECT * FROM suggestions WHERE id = ?').get(id);
   res.json({ message: 'Suggestion updated', suggestion: updated });
 });
 
 // DELETE /api/admin/suggestions/:id - Delete inappropriate suggestion
-adminRouter.delete('/suggestions/:id', (req: Request, res: Response) => {
+adminRouter.delete('/suggestions/:id', async (req: Request, res: Response) => {
   const id = Number(req.params.id);
-  const current = req.db.prepare('SELECT * FROM suggestions WHERE id = ?').get(id) as any;
+  const current = (await req.db.prepare('SELECT * FROM suggestions WHERE id = ?').get(id)) as any;
   if (!current) {
     res.status(404).json({ error: 'NOT_FOUND', message: 'Suggestion not found' });
     return;
   }
 
-  req.db.prepare('DELETE FROM suggestions WHERE id = ?').run(id);
+  await req.db.prepare('DELETE FROM suggestions WHERE id = ?').run(id);
   res.json({ message: 'Suggestion deleted successfully', id });
 });

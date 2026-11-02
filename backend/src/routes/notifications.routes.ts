@@ -9,7 +9,7 @@ import {
 export const notificationsRouter = Router();
 
 // GET /api/notifications - List user's notifications + unread count
-notificationsRouter.get('/', requireAuth, (req: Request, res: Response) => {
+notificationsRouter.get('/', requireAuth, async (req: Request, res: Response) => {
   const userId = req.user!.id;
   const limit = Math.min(100, Math.max(1, Number(req.query.limit || 50)));
   const offset = Math.max(0, Number(req.query.offset || 0));
@@ -31,20 +31,20 @@ notificationsRouter.get('/', requireAuth, (req: Request, res: Response) => {
   query += ` ORDER BY id DESC LIMIT ? OFFSET ?`;
   params.push(limit, offset);
 
-  const rows = req.db.prepare(query).all(...params) as any[];
+  const rows = (await req.db.prepare(query).all(...params)) as any[];
 
   // Unread count
-  const unreadRow = req.db.prepare(`
+  const unreadRow = ((await req.db.prepare(`
     SELECT count(*) as count
     FROM notifications
     WHERE user_id = ? AND is_read = 0
-  `).get(userId) as { count: number };
+  `).get(userId)) as { count: number }) || { count: 0 };
 
-  const totalRow = req.db.prepare(`
+  const totalRow = ((await req.db.prepare(`
     SELECT count(*) as count
     FROM notifications
     WHERE user_id = ?
-  `).get(userId) as { count: number };
+  `).get(userId)) as { count: number }) || { count: 0 };
 
   const notifications = rows.map(r => ({
     ...r,
@@ -59,7 +59,7 @@ notificationsRouter.get('/', requireAuth, (req: Request, res: Response) => {
 });
 
 // PATCH /api/notifications/:id/read - Mark single notification as read
-notificationsRouter.patch('/:id/read', requireAuth, (req: Request, res: Response) => {
+notificationsRouter.patch('/:id/read', requireAuth, async (req: Request, res: Response) => {
   const userId = req.user!.id;
   const notifId = Number(req.params.id);
 
@@ -69,7 +69,7 @@ notificationsRouter.patch('/:id/read', requireAuth, (req: Request, res: Response
   }
 
   // Security: only the owner of the notification can mark it as read
-  const notif = req.db.prepare('SELECT id, user_id FROM notifications WHERE id = ?').get(notifId) as { id: number; user_id: number } | undefined;
+  const notif = (await req.db.prepare('SELECT id, user_id FROM notifications WHERE id = ?').get(notifId)) as { id: number; user_id: number } | undefined;
   if (!notif) {
     res.status(404).json({ error: 'NOT_FOUND', message: 'Notification not found' });
     return;
@@ -81,7 +81,7 @@ notificationsRouter.patch('/:id/read', requireAuth, (req: Request, res: Response
   }
 
   const readAt = new Date().toISOString();
-  req.db.prepare(`
+  await req.db.prepare(`
     UPDATE notifications
     SET is_read = 1, read_at = ?
     WHERE id = ? AND user_id = ?
@@ -91,11 +91,11 @@ notificationsRouter.patch('/:id/read', requireAuth, (req: Request, res: Response
 });
 
 // POST /api/notifications/mark-all-read - Mark all notifications as read for current user
-notificationsRouter.post('/mark-all-read', requireAuth, (req: Request, res: Response) => {
+notificationsRouter.post('/mark-all-read', requireAuth, async (req: Request, res: Response) => {
   const userId = req.user!.id;
   const readAt = new Date().toISOString();
 
-  const result = req.db.prepare(`
+  const result = await req.db.prepare(`
     UPDATE notifications
     SET is_read = 1, read_at = ?
     WHERE user_id = ? AND is_read = 0
@@ -108,8 +108,8 @@ notificationsRouter.post('/mark-all-read', requireAuth, (req: Request, res: Resp
 });
 
 // GET /api/notifications/preferences - Get notification preferences
-notificationsRouter.get('/preferences', requireAuth, (req: Request, res: Response) => {
-  const prefs = getNotificationPreferences(req.db, req.user!.id);
+notificationsRouter.get('/preferences', requireAuth, async (req: Request, res: Response) => {
+  const prefs = await getNotificationPreferences(req.db, req.user!.id);
   res.json(prefs);
 });
 
@@ -122,7 +122,7 @@ const updatePrefsSchema = z.object({
 });
 
 // PUT /api/notifications/preferences - Update notification preferences
-notificationsRouter.put('/preferences', requireAuth, (req: Request, res: Response) => {
+notificationsRouter.put('/preferences', requireAuth, async (req: Request, res: Response) => {
   const parseResult = updatePrefsSchema.safeParse(req.body);
   if (!parseResult.success) {
     res.status(400).json({ error: 'VALIDATION_ERROR', details: parseResult.error.format() });
@@ -130,7 +130,7 @@ notificationsRouter.put('/preferences', requireAuth, (req: Request, res: Respons
   }
 
   const data = parseResult.data;
-  const updated = updateNotificationPreferences(req.db, req.user!.id, {
+  const updated = await updateNotificationPreferences(req.db, req.user!.id, {
     trip_notifications: data.trip_notifications !== undefined ? (data.trip_notifications ? 1 : 0) : undefined,
     expense_notifications: data.expense_notifications !== undefined ? (data.expense_notifications ? 1 : 0) : undefined,
     repayment_notifications: data.repayment_notifications !== undefined ? (data.repayment_notifications ? 1 : 0) : undefined,

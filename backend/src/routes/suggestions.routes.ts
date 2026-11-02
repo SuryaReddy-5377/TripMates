@@ -11,7 +11,7 @@ const createSuggestionSchema = z.object({
 });
 
 // POST /api/suggestions - Authenticated users submit a suggestion
-suggestionsRouter.post('/', requireAuth, (req: Request, res: Response) => {
+suggestionsRouter.post('/', requireAuth, async (req: Request, res: Response) => {
   const parseResult = createSuggestionSchema.safeParse(req.body);
   if (!parseResult.success) {
     res.status(400).json({ error: 'VALIDATION_ERROR', details: parseResult.error.format() });
@@ -26,7 +26,7 @@ suggestionsRouter.post('/', requireAuth, (req: Request, res: Response) => {
   const senderEmail = user.email.trim();
 
   try {
-    const insertRes = req.db.prepare(`
+    const insertRes = await req.db.prepare(`
       INSERT INTO suggestions (
         user_id, person_id, sender_name, sender_email,
         title, message, category, status
@@ -42,7 +42,7 @@ suggestionsRouter.post('/', requireAuth, (req: Request, res: Response) => {
     );
 
     const suggestionId = Number(insertRes.lastInsertRowid);
-    const created = req.db.prepare('SELECT * FROM suggestions WHERE id = ?').get(suggestionId);
+    const created = await req.db.prepare('SELECT * FROM suggestions WHERE id = ?').get(suggestionId);
 
     res.status(201).json({
       message: 'Suggestion submitted successfully. Thank you for your feedback!',
@@ -54,10 +54,10 @@ suggestionsRouter.post('/', requireAuth, (req: Request, res: Response) => {
 });
 
 // GET /api/suggestions/my - Authenticated users view their own submitted suggestions
-suggestionsRouter.get('/my', requireAuth, (req: Request, res: Response) => {
+suggestionsRouter.get('/my', requireAuth, async (req: Request, res: Response) => {
   const user = req.user!;
   try {
-    const rows = req.db.prepare(`
+    const rows = await req.db.prepare(`
       SELECT * FROM suggestions
       WHERE user_id = ?
       ORDER BY created_at DESC

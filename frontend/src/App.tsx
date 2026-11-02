@@ -239,9 +239,9 @@ export const App: React.FC = () => {
           selectedTripId ? (
             <TripDetail
               tripId={selectedTripId}
-              user={user}
-              person={person}
-              family={family}
+              currentUser={user}
+              currentPerson={person}
+              currentFamily={family}
               onBack={() => setSelectedTripId(null)}
             />
           ) : (
@@ -258,18 +258,15 @@ export const App: React.FC = () => {
           <Suspense fallback={
             <div style={{ padding: '2rem', textAlign: 'center' }}>{t.loading}</div>
           }>
-            <AuditView />
+            <AuditView onBack={() => setActiveNav('dashboard')} />
           </Suspense>
         )}
       </main>
 
-      <Footer onOpenSuggestion={() => setShowSuggestionModal(true)} />
+      <Footer onOpenSuggestion={() => setShowSuggestionModal(true)} isLoggedIn={!!user} />
 
       {showProfileModal && (
         <ProfileModal
-          user={user}
-          person={person}
-          family={family}
           onClose={() => setShowProfileModal(false)}
           onProfileUpdated={checkAuthStatus}
         />
@@ -277,6 +274,8 @@ export const App: React.FC = () => {
 
       {showSuggestionModal && (
         <SuggestionModal
+          user={user}
+          person={person}
           onClose={() => setShowSuggestionModal(false)}
         />
       )}

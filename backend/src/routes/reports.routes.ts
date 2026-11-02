@@ -6,28 +6,28 @@ import { computeBalances, formatINR } from '../finance';
 export const reportsRouter = Router({ mergeParams: true });
 
 // GET /api/trips/:tripId/reports - Detailed trip financial and attendance report
-reportsRouter.get('/', requireAuth, requireTripAccess('tripId'), (req: Request, res: Response) => {
+reportsRouter.get('/', requireAuth, requireTripAccess('tripId'), async (req: Request, res: Response) => {
   const trip = req.trip!;
   const tripId = trip.id;
 
   try {
-    const { expenses, repayments, assumptions } = loadTripFinancialRecords(req.db, tripId);
+    const { expenses, repayments, assumptions } = await loadTripFinancialRecords(req.db, tripId);
     const balances = computeBalances(expenses, repayments, assumptions);
 
     // Total spending
     const totalSpentPaise = expenses.reduce((a, e) => a + e.total, 0);
 
     // Spending by category
-    const categoryRows = req.db.prepare(`
+    const categoryRows = (await req.db.prepare(`
       SELECT category, sum(total_paise) as total_paise, count(*) as count
       FROM expenses
       WHERE trip_id = ? AND voided_at IS NULL
       GROUP BY category
       ORDER BY total_paise DESC
-    `).all(tripId) as Array<{ category: string; total_paise: number; count: number }>;
+    `).all(tripId)) as Array<{ category: string; total_paise: number; count: number }>;
 
     // Spending by payer
-    const payerRows = req.db.prepare(`
+    const payerRows = (await req.db.prepare(`
       SELECT paid_by_type, paid_by_id, sum(total_paise) as total_paise, count(*) as count,
              CASE
                WHEN paid_by_type = 'person' THEN (SELECT display_name FROM persons WHERE id = paid_by_id)
@@ -37,24 +37,24 @@ reportsRouter.get('/', requireAuth, requireTripAccess('tripId'), (req: Request, 
       WHERE trip_id = ? AND voided_at IS NULL
       GROUP BY paid_by_type, paid_by_id
       ORDER BY total_paise DESC
-    `).all(tripId);
+    `).all(tripId)) as any[];
 
     // Individual vs Family shares summary
-    const allocationSummary = req.db.prepare(`
+    const allocationSummary = (await req.db.prepare(`
       SELECT ea.account_type, sum(ea.amount_paise) as total_paise, count(DISTINCT ea.expense_id) as expense_count
       FROM expense_allocations ea
       JOIN expenses e ON ea.expense_id = e.id
       WHERE e.trip_id = ? AND e.voided_at IS NULL
       GROUP BY ea.account_type
-    `).all(tripId);
+    `).all(tripId)) as any[];
 
     // Attendance stats
-    const attendanceStats = req.db.prepare(`
+    const attendanceStats = (await req.db.prepare(`
       SELECT attendance, count(*) as count
       FROM trip_participants
       WHERE trip_id = ?
       GROUP BY attendance
-    `).all(tripId) as Array<{ attendance: string; count: number }>;
+    `).all(tripId)) as Array<{ attendance: string; count: number }>;
 
     // Budget utilization
     let budgetUtilization = null;

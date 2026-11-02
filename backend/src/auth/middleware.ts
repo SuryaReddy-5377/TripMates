@@ -1,13 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
-import { DatabaseSync } from 'node:sqlite';
-import { getDb } from '../db/connection';
+import { getDb, AnyDb } from '../db/connection';
 import { validateSession } from './session';
 import { User, Person, Family, UserRole, Trip } from '../types';
 
 declare global {
   namespace Express {
     interface Request {
-      db: DatabaseSync;
+      db: AnyDb;
       user?: User;
       person?: Person | null;
       family?: Family | null;
@@ -17,7 +16,7 @@ declare global {
   }
 }
 
-export function attachDbAndSession(req: Request, _res: Response, next: NextFunction): void {
+export async function attachDbAndSession(req: Request, _res: Response, next: NextFunction): Promise<void> {
   const db = getDb();
   req.db = db;
 
@@ -30,12 +29,16 @@ export function attachDbAndSession(req: Request, _res: Response, next: NextFunct
   }
 
   if (token) {
-    const session = validateSession(db, token);
-    if (session) {
-      req.user = session.user;
-      req.person = session.person;
-      req.family = session.family;
-      req.sessionToken = token;
+    try {
+      const session = await validateSession(db, token);
+      if (session) {
+        req.user = session.user;
+        req.person = session.person;
+        req.family = session.family;
+        req.sessionToken = token;
+      }
+    } catch (err) {
+      console.error('Session validation error:', err);
     }
   }
 
@@ -65,7 +68,7 @@ export function requireRole(...roles: UserRole[]) {
 }
 
 export function requireFamilyAccess(paramName = 'familyId') {
-  return (req: Request, res: Response, next: NextFunction): void => {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     if (!req.user) {
       res.status(401).json({ error: 'UNAUTHORIZED', message: 'Authentication required' });
       return;
@@ -83,7 +86,7 @@ export function requireFamilyAccess(paramName = 'familyId') {
     }
 
     // Check if user is admin of target family
-    const familyRow = req.db.prepare('SELECT id, admin_user_id FROM families WHERE id = ?').get(targetFamilyId) as { id: number; admin_user_id: number | null } | undefined;
+    const familyRow = await req.db.prepare('SELECT id, admin_user_id FROM families WHERE id = ?').get(targetFamilyId) as { id: number; admin_user_id: number | null } | undefined;
     if (!familyRow) {
       res.status(404).json({ error: 'NOT_FOUND', message: 'Family not found' });
       return;
@@ -96,7 +99,7 @@ export function requireFamilyAccess(paramName = 'familyId') {
 
     // Check if user's person belongs to this family
     if (req.person) {
-      const membership = req.db.prepare(`
+      const membership = await req.db.prepare(`
         SELECT id FROM family_memberships
         WHERE family_id = ? AND person_id = ? AND left_at IS NULL
       `).get(targetFamilyId, req.person.id);
@@ -112,7 +115,7 @@ export function requireFamilyAccess(paramName = 'familyId') {
 }
 
 export function requireTripAccess(paramName = 'tripId') {
-  return (req: Request, res: Response, next: NextFunction): void => {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     if (!req.user) {
       res.status(401).json({ error: 'UNAUTHORIZED', message: 'Authentication required' });
       return;
@@ -124,7 +127,7 @@ export function requireTripAccess(paramName = 'tripId') {
       return;
     }
 
-    const trip = req.db.prepare(`
+    const trip = await req.db.prepare(`
       SELECT id, name, destination, start_date, end_date, description, notes, cover_image, budget_paise, status, is_private, created_by, completed_at, created_at
       FROM trips
       WHERE id = ?
@@ -148,7 +151,7 @@ export function requireTripAccess(paramName = 'tripId') {
     let attendanceStatus: string | null = null;
 
     if (req.person) {
-      const pRow = req.db.prepare(`
+      const pRow = await req.db.prepare(`
         SELECT attendance FROM trip_participants
         WHERE trip_id = ? AND person_id = ?
       `).get(tripId, req.person.id) as { attendance: string } | undefined;
@@ -162,7 +165,7 @@ export function requireTripAccess(paramName = 'tripId') {
     // Check membership in trip_families
     let isInTripFamily = false;
     if (req.family) {
-      const fRow = req.db.prepare(`
+      const fRow = await req.db.prepare(`
         SELECT 1 FROM trip_families
         WHERE trip_id = ? AND family_id = ?
       `).get(tripId, req.family.id);

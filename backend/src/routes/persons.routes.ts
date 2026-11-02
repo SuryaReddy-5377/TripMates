@@ -10,8 +10,8 @@ const createPersonSchema = z.object({
 });
 
 // GET /api/persons/available - Fetch all active members who can be invited to trips
-personsRouter.get('/available', requireAuth, (req: Request, res: Response) => {
-  const persons = req.db.prepare(`
+personsRouter.get('/available', requireAuth, async (req: Request, res: Response) => {
+  const persons = await req.db.prepare(`
     SELECT p.id, p.display_name, p.user_id, p.is_active,
            f.id as family_id, f.name as family_name,
            u.email, u.role
@@ -25,9 +25,9 @@ personsRouter.get('/available', requireAuth, (req: Request, res: Response) => {
   res.json(persons);
 });
 
-personsRouter.get('/', requireAuth, (req: Request, res: Response) => {
+personsRouter.get('/', requireAuth, async (req: Request, res: Response) => {
   if (req.user!.role === 'super_admin') {
-    const persons = req.db.prepare(`
+    const persons = await req.db.prepare(`
       SELECT p.id, p.display_name, p.user_id, p.is_active,
              f.id as family_id, f.name as family_name,
              u.email, u.role
@@ -46,7 +46,7 @@ personsRouter.get('/', requireAuth, (req: Request, res: Response) => {
   const familyId = req.family?.id ?? null;
   const personId = req.person?.id ?? null;
 
-  const persons = req.db.prepare(`
+  const persons = await req.db.prepare(`
     SELECT DISTINCT p.id, p.display_name, p.user_id, p.is_active,
            f.id as family_id, f.name as family_name,
            u.email, u.role
@@ -72,7 +72,7 @@ personsRouter.get('/', requireAuth, (req: Request, res: Response) => {
   res.json(persons);
 });
 
-personsRouter.post('/', requireAuth, (req: Request, res: Response) => {
+personsRouter.post('/', requireAuth, async (req: Request, res: Response) => {
   const parseResult = createPersonSchema.safeParse(req.body);
   if (!parseResult.success) {
     res.status(400).json({ error: 'VALIDATION_ERROR', details: parseResult.error.format() });
@@ -89,7 +89,7 @@ personsRouter.post('/', requireAuth, (req: Request, res: Response) => {
     }
   }
 
-  const pRes = req.db.prepare(`
+  const pRes = await req.db.prepare(`
     INSERT INTO persons (display_name, is_active)
     VALUES (?, 1)
   `).run(display_name);
@@ -97,7 +97,7 @@ personsRouter.post('/', requireAuth, (req: Request, res: Response) => {
   const personId = Number(pRes.lastInsertRowid);
 
   if (family_id) {
-    req.db.prepare(`
+    await req.db.prepare(`
       INSERT INTO family_memberships (family_id, person_id)
       VALUES (?, ?)
     `).run(family_id, personId);

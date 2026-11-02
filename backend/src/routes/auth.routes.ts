@@ -33,18 +33,18 @@ const setupAdminSchema = z.object({
   displayName: z.string().min(2),
 });
 
-authRouter.get('/status', (req: Request, res: Response) => {
-  const isSuperAdminConfigured = hasSuperAdmin(req.db);
+authRouter.get('/status', async (req: Request, res: Response) => {
+  const isSuperAdminConfigured = await hasSuperAdmin(req.db);
   res.json({
-    hasSuperAdmin: isSuperAdminConfigured,
+    hasSuperAdmin: Boolean(isSuperAdminConfigured),
     user: req.user || null,
     person: req.person || null,
     family: req.family || null,
   });
 });
 
-authRouter.post('/setup-admin', (req: Request, res: Response) => {
-  if (hasSuperAdmin(req.db)) {
+authRouter.post('/setup-admin', async (req: Request, res: Response) => {
+  if (await hasSuperAdmin(req.db)) {
     res.status(403).json({
       error: 'SETUP_DISABLED',
       message: 'Initial Super Admin setup is permanently disabled because a Super Admin is already configured in the system.',
@@ -60,8 +60,8 @@ authRouter.post('/setup-admin', (req: Request, res: Response) => {
 
   const { email, password, displayName } = parseResult.data;
   try {
-    const { user, person } = createInitialSuperAdmin(req.db, email, password, displayName);
-    const session = createSession(req.db, user.id);
+    const { user, person } = await createInitialSuperAdmin(req.db, email, password, displayName);
+    const session = await createSession(req.db, user.id);
 
     res.cookie('session_token', session.token, {
       httpOnly: true,
@@ -82,7 +82,7 @@ authRouter.post('/setup-admin', (req: Request, res: Response) => {
   }
 });
 
-const handleLogin = (req: Request, res: Response) => {
+const handleLogin = async (req: Request, res: Response) => {
   const parseResult = loginSchema.safeParse(req.body);
   if (!parseResult.success) {
     res.status(400).json({ error: 'VALIDATION_ERROR', details: parseResult.error.format() });
@@ -90,18 +90,18 @@ const handleLogin = (req: Request, res: Response) => {
   }
 
   const { email, password } = parseResult.data;
-  const userRow = req.db.prepare(`
+  const userRow = (await req.db.prepare(`
     SELECT id, email, password_hash, role, is_active, created_at
     FROM users
     WHERE email = ? COLLATE NOCASE
-  `).get(email) as { id: number; email: string; password_hash: string; role: string; is_active: number; created_at: string } | undefined;
+  `).get(email)) as { id: number; email: string; password_hash: string; role: string; is_active: number; created_at: string } | undefined;
 
   if (!userRow || userRow.is_active !== 1 || !verifyPassword(password, userRow.password_hash)) {
     res.status(401).json({ error: 'INVALID_CREDENTIALS', message: 'Invalid email or password' });
     return;
   }
 
-  const session = createSession(req.db, userRow.id);
+  const session = await createSession(req.db, userRow.id);
 
   res.cookie('session_token', session.token, {
     httpOnly: true,
@@ -111,7 +111,7 @@ const handleLogin = (req: Request, res: Response) => {
   });
 
   // Fetch person and family info
-  const personRow = req.db.prepare(`
+  const personRow = await req.db.prepare(`
     SELECT id, display_name, user_id, is_active
     FROM persons
     WHERE user_id = ? AND is_active = 1
@@ -119,7 +119,7 @@ const handleLogin = (req: Request, res: Response) => {
 
   let familyRow = null;
   if (personRow) {
-    familyRow = req.db.prepare(`
+    familyRow = await req.db.prepare(`
       SELECT f.id, f.name, f.admin_user_id, f.is_active, f.created_at
       FROM families f
       JOIN family_memberships fm ON fm.family_id = f.id
@@ -128,7 +128,7 @@ const handleLogin = (req: Request, res: Response) => {
     `).get((personRow as { id: number }).id);
   }
   if (!familyRow) {
-    familyRow = req.db.prepare(`
+    familyRow = await req.db.prepare(`
       SELECT id, name, admin_user_id, is_active, created_at
       FROM families
       WHERE admin_user_id = ? AND is_active = 1
@@ -154,7 +154,7 @@ const handleLogin = (req: Request, res: Response) => {
 authRouter.post('/login', handleLogin);
 authRouter.post('/signin', handleLogin);
 
-authRouter.post('/quick-login', (req: Request, res: Response) => {
+authRouter.post('/quick-login', async (req: Request, res: Response) => {
   const parseResult = quickLoginSchema.safeParse(req.body);
   if (!parseResult.success) {
     res.status(400).json({ error: 'VALIDATION_ERROR', details: parseResult.error.format() });
@@ -162,18 +162,18 @@ authRouter.post('/quick-login', (req: Request, res: Response) => {
   }
 
   const { email } = parseResult.data;
-  const userRow = req.db.prepare(`
+  const userRow = (await req.db.prepare(`
     SELECT id, email, password_hash, role, is_active, created_at
     FROM users
     WHERE email = ? COLLATE NOCASE
-  `).get(email) as { id: number; email: string; password_hash: string; role: string; is_active: number; created_at: string } | undefined;
+  `).get(email)) as { id: number; email: string; password_hash: string; role: string; is_active: number; created_at: string } | undefined;
 
   if (!userRow || userRow.is_active !== 1) {
     res.status(401).json({ error: 'INVALID_CREDENTIALS', message: 'User not found or inactive' });
     return;
   }
 
-  const session = createSession(req.db, userRow.id);
+  const session = await createSession(req.db, userRow.id);
 
   res.cookie('session_token', session.token, {
     httpOnly: true,
@@ -182,7 +182,7 @@ authRouter.post('/quick-login', (req: Request, res: Response) => {
     maxAge: 30 * 24 * 60 * 60 * 1000,
   });
 
-  const personRow = req.db.prepare(`
+  const personRow = await req.db.prepare(`
     SELECT id, display_name, user_id, is_active
     FROM persons
     WHERE user_id = ? AND is_active = 1
@@ -190,7 +190,7 @@ authRouter.post('/quick-login', (req: Request, res: Response) => {
 
   let familyRow = null;
   if (personRow) {
-    familyRow = req.db.prepare(`
+    familyRow = await req.db.prepare(`
       SELECT f.id, f.name, f.admin_user_id, f.is_active, f.created_at
       FROM families f
       JOIN family_memberships fm ON fm.family_id = f.id
@@ -199,7 +199,7 @@ authRouter.post('/quick-login', (req: Request, res: Response) => {
     `).get((personRow as { id: number }).id);
   }
   if (!familyRow) {
-    familyRow = req.db.prepare(`
+    familyRow = await req.db.prepare(`
       SELECT id, name, admin_user_id, is_active, created_at
       FROM families
       WHERE admin_user_id = ? AND is_active = 1
@@ -222,7 +222,7 @@ authRouter.post('/quick-login', (req: Request, res: Response) => {
   });
 });
 
-const handleRegister = (req: Request, res: Response) => {
+const handleRegister = async (req: Request, res: Response) => {
   const parseResult = registerSchema.safeParse(req.body);
   if (!parseResult.success) {
     res.status(400).json({ error: 'VALIDATION_ERROR', details: parseResult.error.format() });
@@ -233,7 +233,7 @@ const handleRegister = (req: Request, res: Response) => {
   const cleanCode = typeof rawCode === 'string' ? rawCode.trim().toUpperCase() : '';
 
   // 1. Strict Email Uniqueness Check across all registration paths
-  const existingUser = req.db.prepare('SELECT id FROM users WHERE email = ? COLLATE NOCASE').get(email);
+  const existingUser = await req.db.prepare('SELECT id FROM users WHERE email = ? COLLATE NOCASE').get(email);
   if (existingUser) {
     res.status(400).json({
       error: 'USER_EXISTS',
@@ -245,10 +245,10 @@ const handleRegister = (req: Request, res: Response) => {
   // 2. Validate Invitation Code (if supplied)
   if (cleanCode.length > 0) {
     // 2a. Check family_invite_codes table first (Super Admin generated codes)
-    const famCode = req.db.prepare(`
+    const famCode = (await req.db.prepare(`
       SELECT * FROM family_invite_codes
       WHERE code = ? COLLATE NOCASE
-    `).get(cleanCode) as any;
+    `).get(cleanCode)) as any;
 
     if (famCode) {
       if (famCode.status === 'revoked') {
@@ -256,7 +256,7 @@ const handleRegister = (req: Request, res: Response) => {
         return;
       }
       if (famCode.status === 'exhausted' || famCode.uses_count >= famCode.max_uses) {
-        res.status(400).json({ error: 'CODE_EXHAUSTED', message: 'This invitation code has reached its maximum usage limit.' });
+        res.status(400).json({ error: 'CODE_INACTIVE', reason: 'exhausted', message: 'This invitation code has reached its maximum usage limit.' });
         return;
       }
       if (famCode.status !== 'active') {
@@ -276,9 +276,9 @@ const handleRegister = (req: Request, res: Response) => {
       const hashedPassword = hashPassword(password);
 
       try {
-        const result = withTransaction(req.db, () => {
+        const result = await withTransaction(req.db, async () => {
           // Concurrency-safe atomic check and update of usage limit inside transaction
-          const updated = req.db.prepare(`
+          const updated = await req.db.prepare(`
             UPDATE family_invite_codes
             SET uses_count = uses_count + 1,
                 status = CASE WHEN uses_count + 1 >= max_uses THEN 'exhausted' ELSE status END
@@ -289,13 +289,13 @@ const handleRegister = (req: Request, res: Response) => {
             throw new Error('This invitation code usage limit was reached or is no longer active.');
           }
 
-          const userRes = req.db.prepare(`
+          const userRes = await req.db.prepare(`
             INSERT INTO users (email, password_hash, role)
             VALUES (?, ?, 'member')
           `).run(email, hashedPassword);
           const userId = Number(userRes.lastInsertRowid);
 
-          const personRes = req.db.prepare(`
+          const personRes = await req.db.prepare(`
             INSERT INTO persons (display_name, user_id)
             VALUES (?, ?)
           `).run(displayName, userId);
@@ -303,27 +303,27 @@ const handleRegister = (req: Request, res: Response) => {
 
           let family = null;
           if (famCode.family_id) {
-            req.db.prepare(`
+            await req.db.prepare(`
               INSERT INTO family_memberships (family_id, person_id)
               VALUES (?, ?)
             `).run(famCode.family_id, personId);
-            family = req.db.prepare('SELECT * FROM families WHERE id = ?').get(famCode.family_id);
+            family = await req.db.prepare('SELECT * FROM families WHERE id = ?').get(famCode.family_id);
           } else {
             // If invite code was created globally without a family, create a personal family
             const famName = `${displayName}'s Family`;
-            const famRes = req.db.prepare(`
+            const famRes = await req.db.prepare(`
               INSERT INTO families (name, admin_user_id)
               VALUES (?, ?)
             `).run(famName, userId);
             const familyId = Number(famRes.lastInsertRowid);
-            req.db.prepare(`
+            await req.db.prepare(`
               INSERT INTO family_memberships (family_id, person_id)
               VALUES (?, ?)
             `).run(familyId, personId);
-            family = req.db.prepare('SELECT * FROM families WHERE id = ?').get(familyId);
+            family = await req.db.prepare('SELECT * FROM families WHERE id = ?').get(familyId);
           }
 
-          const session = createSession(req.db, userId);
+          const session = await createSession(req.db, userId);
 
           res.cookie('session_token', session.token, {
             httpOnly: true,
@@ -353,12 +353,12 @@ const handleRegister = (req: Request, res: Response) => {
     }
 
     // 2b. Check trip-based invitations table
-    const invite = req.db.prepare(`
+    const invite = (await req.db.prepare(`
       SELECT i.*, t.name as trip_name
       FROM invitations i
       LEFT JOIN trips t ON i.trip_id = t.id
       WHERE i.invite_code = ? COLLATE NOCASE
-    `).get(cleanCode) as any;
+    `).get(cleanCode)) as any;
 
     if (invite) {
       if (invite.status === 'accepted') {
@@ -382,51 +382,51 @@ const handleRegister = (req: Request, res: Response) => {
       const hashedPassword = hashPassword(password);
 
       try {
-        const result = withTransaction(req.db, () => {
-          const userRes = req.db.prepare(`
+        const result = await withTransaction(req.db, async () => {
+          const userRes = await req.db.prepare(`
             INSERT INTO users (email, password_hash, role)
             VALUES (?, ?, 'member')
           `).run(email, hashedPassword);
           const userId = Number(userRes.lastInsertRowid);
 
-          const personRes = req.db.prepare(`
+          const personRes = await req.db.prepare(`
             INSERT INTO persons (display_name, user_id)
             VALUES (?, ?)
           `).run(displayName, userId);
           const personId = Number(personRes.lastInsertRowid);
 
           if (invite.family_id) {
-            req.db.prepare(`
+            await req.db.prepare(`
               INSERT INTO family_memberships (family_id, person_id)
               VALUES (?, ?)
             `).run(invite.family_id, personId);
           } else {
             const famName = `${displayName}'s Family`;
-            const famRes = req.db.prepare(`
+            const famRes = await req.db.prepare(`
               INSERT INTO families (name, admin_user_id)
               VALUES (?, ?)
             `).run(famName, userId);
             const familyId = Number(famRes.lastInsertRowid);
-            req.db.prepare(`
+            await req.db.prepare(`
               INSERT INTO family_memberships (family_id, person_id)
               VALUES (?, ?)
             `).run(familyId, personId);
           }
 
           if (invite.trip_id) {
-            req.db.prepare(`
+            await req.db.prepare(`
               INSERT OR IGNORE INTO trip_participants (trip_id, person_id, attendance)
               VALUES (?, ?, 'coming')
             `).run(invite.trip_id, personId);
           }
 
-          req.db.prepare(`
+          await req.db.prepare(`
             UPDATE invitations
             SET status = 'accepted', person_id = COALESCE(person_id, ?)
             WHERE id = ?
           `).run(personId, invite.id);
 
-          const session = createSession(req.db, userId);
+          const session = await createSession(req.db, userId);
 
           res.cookie('session_token', session.token, {
             httpOnly: true,
@@ -439,9 +439,9 @@ const handleRegister = (req: Request, res: Response) => {
           const person = { id: personId, display_name: displayName, user_id: userId, is_active: 1 };
           let family = null;
           if (invite.family_id) {
-            family = req.db.prepare('SELECT * FROM families WHERE id = ?').get(invite.family_id);
+            family = await req.db.prepare('SELECT * FROM families WHERE id = ?').get(invite.family_id);
           } else {
-            family = req.db.prepare('SELECT * FROM families WHERE admin_user_id = ?').get(userId);
+            family = await req.db.prepare('SELECT * FROM families WHERE admin_user_id = ?').get(userId);
           }
 
           return { user, person, family, token: session.token };
@@ -470,14 +470,14 @@ const handleRegister = (req: Request, res: Response) => {
   const hashedPassword = hashPassword(password);
 
   try {
-    const result = withTransaction(req.db, () => {
-      const userRes = req.db.prepare(`
+    const result = await withTransaction(req.db, async () => {
+      const userRes = await req.db.prepare(`
         INSERT INTO users (email, password_hash, role)
         VALUES (?, ?, 'member')
       `).run(email, hashedPassword);
       const userId = Number(userRes.lastInsertRowid);
 
-      const personRes = req.db.prepare(`
+      const personRes = await req.db.prepare(`
         INSERT INTO persons (display_name, user_id)
         VALUES (?, ?)
       `).run(displayName, userId);
@@ -485,19 +485,19 @@ const handleRegister = (req: Request, res: Response) => {
 
       // Create a default personal family for this newly registered user
       const famName = `${displayName}'s Family`;
-      const famRes = req.db.prepare(`
+      const famRes = await req.db.prepare(`
         INSERT INTO families (name, admin_user_id)
         VALUES (?, ?)
       `).run(famName, userId);
       const familyId = Number(famRes.lastInsertRowid);
 
-      req.db.prepare(`
+      await req.db.prepare(`
         INSERT INTO family_memberships (family_id, person_id)
         VALUES (?, ?)
       `).run(familyId, personId);
 
-      const family = req.db.prepare('SELECT * FROM families WHERE id = ?').get(familyId);
-      const session = createSession(req.db, userId);
+      const family = await req.db.prepare('SELECT * FROM families WHERE id = ?').get(familyId);
+      const session = await createSession(req.db, userId);
 
       res.cookie('session_token', session.token, {
         httpOnly: true,
@@ -530,33 +530,33 @@ authRouter.post('/register', handleRegister);
 authRouter.post('/signup', handleRegister);
 authRouter.post('/register-invite', handleRegister);
 
-authRouter.post('/reset-password', (req: Request, res: Response) => {
+authRouter.post('/reset-password', async (req: Request, res: Response) => {
   const { email, password } = req.body || {};
   if (!email || !password || typeof password !== 'string' || password.length < 6) {
     res.status(400).json({ error: 'INVALID_REQUEST', message: 'Valid email and password (minimum 6 characters) are required.' });
     return;
   }
-  const user = req.db.prepare('SELECT id, email, role, is_active FROM users WHERE email = ? COLLATE NOCASE').get(email.trim()) as any;
+  const user = (await req.db.prepare('SELECT id, email, role, is_active FROM users WHERE email = ? COLLATE NOCASE').get(email.trim())) as any;
   if (!user) {
     res.status(404).json({ error: 'USER_NOT_FOUND', message: 'No account found with this email address.' });
     return;
   }
   const hashedPassword = hashPassword(password);
-  req.db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashedPassword, user.id);
-  const session = createSession(req.db, user.id);
+  await req.db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashedPassword, user.id);
+  const session = await createSession(req.db, user.id);
   res.cookie('session_token', session.token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     maxAge: 30 * 24 * 60 * 60 * 1000,
   });
-  const person = req.db.prepare('SELECT id, display_name, user_id, is_active FROM persons WHERE user_id = ?').get(user.id);
+  const person = await req.db.prepare('SELECT id, display_name, user_id, is_active FROM persons WHERE user_id = ?').get(user.id);
   res.json({ message: 'Password updated successfully', token: session.token, user, person });
 });
 
-authRouter.post('/logout', (req: Request, res: Response) => {
+authRouter.post('/logout', async (req: Request, res: Response) => {
   if (req.sessionToken) {
-    revokeSession(req.db, req.sessionToken);
+    await revokeSession(req.db, req.sessionToken);
   }
   res.clearCookie('session_token');
   res.json({ message: 'Logged out successfully' });
@@ -571,14 +571,14 @@ authRouter.get('/me', requireAuth, (req: Request, res: Response) => {
 });
 
 // GET /api/auth/profile - Full profile including family members breakdown
-authRouter.get('/profile', requireAuth, (req: Request, res: Response) => {
+authRouter.get('/profile', requireAuth, async (req: Request, res: Response) => {
   const user = req.user!;
   const person = req.person!;
   const family = req.family;
 
   let familyMembers: any[] = [];
   if (family) {
-    familyMembers = req.db.prepare(`
+    familyMembers = await req.db.prepare(`
       SELECT p.id, p.display_name, p.user_id, p.is_active, u.email, fm.joined_at,
              CASE WHEN f.admin_user_id = p.user_id THEN 1 ELSE 0 END as is_family_admin,
              CASE WHEN p.id = ? THEN 1 ELSE 0 END as is_current_user
@@ -606,7 +606,7 @@ authRouter.get('/profile', requireAuth, (req: Request, res: Response) => {
 });
 
 // POST /api/auth/profile/family - Create or update family name
-authRouter.post('/profile/family', requireAuth, (req: Request, res: Response) => {
+authRouter.post('/profile/family', requireAuth, async (req: Request, res: Response) => {
   const { name } = req.body;
   if (!name || typeof name !== 'string' || name.trim().length < 2) {
     res.status(400).json({ error: 'INVALID_NAME', message: 'Family name must be at least 2 characters long' });
@@ -618,22 +618,22 @@ authRouter.post('/profile/family', requireAuth, (req: Request, res: Response) =>
   const person = req.person!;
 
   try {
-    const updatedFamily = withTransaction(req.db, () => {
+    const updatedFamily = await withTransaction(req.db, async () => {
       let family = req.family;
       if (family) {
         // Update existing family name
-        req.db.prepare(`UPDATE families SET name = ? WHERE id = ?`).run(trimmedName, family.id);
+        await req.db.prepare(`UPDATE families SET name = ? WHERE id = ?`).run(trimmedName, family.id);
         return { ...family, name: trimmedName };
       } else {
         // Create new family for this user
-        const famRes = req.db.prepare(`
+        const famRes = await req.db.prepare(`
           INSERT INTO families (name, admin_user_id, is_active)
           VALUES (?, ?, 1)
         `).run(trimmedName, user.id);
         const familyId = Number(famRes.lastInsertRowid);
 
         if (person) {
-          req.db.prepare(`
+          await req.db.prepare(`
             INSERT OR IGNORE INTO family_memberships (family_id, person_id)
             VALUES (?, ?)
           `).run(familyId, person.id);
@@ -641,7 +641,7 @@ authRouter.post('/profile/family', requireAuth, (req: Request, res: Response) =>
 
         // Elevate user role to family_admin if currently standard member
         if (user.role === 'member') {
-          req.db.prepare(`UPDATE users SET role = 'family_admin' WHERE id = ?`).run(user.id);
+          await req.db.prepare(`UPDATE users SET role = 'family_admin' WHERE id = ?`).run(user.id);
         }
 
         return { id: familyId, name: trimmedName, admin_user_id: user.id, is_active: 1 };
@@ -655,7 +655,7 @@ authRouter.post('/profile/family', requireAuth, (req: Request, res: Response) =>
 });
 
 // POST /api/auth/profile/family/members - Add a family member (spouse, child, etc.)
-authRouter.post('/profile/family/members', requireAuth, (req: Request, res: Response) => {
+authRouter.post('/profile/family/members', requireAuth, async (req: Request, res: Response) => {
   const { display_name, email, password } = req.body;
   if (!display_name || typeof display_name !== 'string' || display_name.trim().length < 2) {
     res.status(400).json({ error: 'INVALID_NAME', message: 'Display name must be at least 2 characters' });
@@ -667,18 +667,18 @@ authRouter.post('/profile/family/members', requireAuth, (req: Request, res: Resp
   let family = req.family;
 
   try {
-    const createdMember = withTransaction(req.db, () => {
+    const createdMember = await withTransaction(req.db, async () => {
       // If user doesn't have a family yet, auto-create one based on their name
       if (!family) {
         const defaultFamName = `${person?.display_name || user.email.split('@')[0]}'s Family`;
-        const famRes = req.db.prepare(`
+        const famRes = await req.db.prepare(`
           INSERT INTO families (name, admin_user_id, is_active)
           VALUES (?, ?, 1)
         `).run(defaultFamName, user.id);
         const famId = Number(famRes.lastInsertRowid);
 
         if (person) {
-          req.db.prepare(`
+          await req.db.prepare(`
             INSERT OR IGNORE INTO family_memberships (family_id, person_id)
             VALUES (?, ?)
           `).run(famId, person.id);
@@ -689,25 +689,25 @@ authRouter.post('/profile/family/members', requireAuth, (req: Request, res: Resp
 
       let newUserId: number | null = null;
       if (email && password) {
-        const existing = req.db.prepare('SELECT id FROM users WHERE email = ? COLLATE NOCASE').get(email);
+        const existing = await req.db.prepare('SELECT id FROM users WHERE email = ? COLLATE NOCASE').get(email);
         if (existing) {
           throw new Error(`Email ${email} is already in use`);
         }
         const pwdHash = hashPassword(password);
-        const uRes = req.db.prepare(`
+        const uRes = await req.db.prepare(`
           INSERT INTO users (email, password_hash, role, is_active)
           VALUES (?, ?, 'member', 1)
         `).run(email, pwdHash);
         newUserId = Number(uRes.lastInsertRowid);
       }
 
-      const pRes = req.db.prepare(`
+      const pRes = await req.db.prepare(`
         INSERT INTO persons (display_name, user_id, is_active)
         VALUES (?, ?, 1)
       `).run(display_name.trim(), newUserId);
       const newPersonId = Number(pRes.lastInsertRowid);
 
-      req.db.prepare(`
+      await req.db.prepare(`
         INSERT INTO family_memberships (family_id, person_id)
         VALUES (?, ?)
       `).run(family!.id, newPersonId);
@@ -728,7 +728,7 @@ authRouter.post('/profile/family/members', requireAuth, (req: Request, res: Resp
 });
 
 // DELETE /api/auth/profile/family/members/:personId - Remove member from family
-authRouter.delete('/profile/family/members/:personId', requireAuth, (req: Request, res: Response) => {
+authRouter.delete('/profile/family/members/:personId', requireAuth, async (req: Request, res: Response) => {
   const targetPersonId = Number(req.params.personId);
   const user = req.user!;
   const person = req.person!;
@@ -745,7 +745,7 @@ authRouter.delete('/profile/family/members/:personId', requireAuth, (req: Reques
   }
 
   // Ensure target belongs to user's family
-  const membership = req.db.prepare(`
+  const membership = await req.db.prepare(`
     SELECT id FROM family_memberships
     WHERE family_id = ? AND person_id = ? AND left_at IS NULL
   `).get(family.id, targetPersonId);
@@ -756,7 +756,7 @@ authRouter.delete('/profile/family/members/:personId', requireAuth, (req: Reques
   }
 
   // Check if they are involved in trip expenses
-  const hasExpenses = req.db.prepare(`
+  const hasExpenses = await req.db.prepare(`
     SELECT 1 FROM expense_allocations WHERE account_type = 'person' AND account_id = ?
     UNION
     SELECT 1 FROM expenses WHERE paid_by_type = 'person' AND paid_by_id = ?
@@ -765,14 +765,14 @@ authRouter.delete('/profile/family/members/:personId', requireAuth, (req: Reques
 
   if (hasExpenses) {
     // Soft remove: set left_at
-    req.db.prepare(`
+    await req.db.prepare(`
       UPDATE family_memberships
       SET left_at = datetime('now')
       WHERE family_id = ? AND person_id = ?
     `).run(family.id, targetPersonId);
   } else {
     // Delete membership
-    req.db.prepare(`
+    await req.db.prepare(`
       DELETE FROM family_memberships
       WHERE family_id = ? AND person_id = ?
     `).run(family.id, targetPersonId);

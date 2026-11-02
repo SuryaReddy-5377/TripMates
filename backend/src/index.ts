@@ -6,7 +6,7 @@ import { runMigrations } from './db/migrations';
 async function startServer() {
   console.log('Connecting to database and running migrations...');
   const db = getDb();
-  const { applied, skipped } = runMigrations(db);
+  const { applied, skipped } = await runMigrations(db);
   console.log(`Migrations complete. Applied: ${applied.length}, Skipped: ${skipped.length}`);
 
   const app = createApp();

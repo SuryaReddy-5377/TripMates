@@ -21,9 +21,9 @@ const addMemberSchema = z.object({
 });
 
 // GET /api/families - Respects family isolation
-familiesRouter.get('/', requireAuth, (req: Request, res: Response) => {
+familiesRouter.get('/', requireAuth, async (req: Request, res: Response) => {
   if (req.user!.role === 'super_admin') {
-    const families = req.db.prepare(`
+    const families = await req.db.prepare(`
       SELECT f.id, f.name, f.admin_user_id, f.is_active, f.created_at,
              u.email as admin_email,
              (SELECT count(*) FROM family_memberships fm WHERE fm.family_id = f.id AND fm.left_at IS NULL) as member_count
@@ -37,7 +37,7 @@ familiesRouter.get('/', requireAuth, (req: Request, res: Response) => {
 
   // Non-super-admins: only their own family
   if (req.family) {
-    const fam = req.db.prepare(`
+    const fam = await req.db.prepare(`
       SELECT f.id, f.name, f.admin_user_id, f.is_active, f.created_at,
              u.email as admin_email,
              (SELECT count(*) FROM family_memberships fm WHERE fm.family_id = f.id AND fm.left_at IS NULL) as member_count
@@ -53,7 +53,7 @@ familiesRouter.get('/', requireAuth, (req: Request, res: Response) => {
 });
 
 // POST /api/families - Super Admin only
-familiesRouter.post('/', requireAuth, requireRole('super_admin'), (req: Request, res: Response) => {
+familiesRouter.post('/', requireAuth, requireRole('super_admin'), async (req: Request, res: Response) => {
   const parseResult = createFamilySchema.safeParse(req.body);
   if (!parseResult.success) {
     res.status(400).json({ error: 'VALIDATION_ERROR', details: parseResult.error.format() });
@@ -63,25 +63,25 @@ familiesRouter.post('/', requireAuth, requireRole('super_admin'), (req: Request,
   const { name, admin_email, admin_password, admin_display_name } = parseResult.data;
 
   try {
-    const result = withTransaction(req.db, () => {
+    const result = await withTransaction(req.db, async () => {
       let adminUserId: number | null = null;
       let adminPersonId: number | null = null;
 
       if (admin_email && admin_password) {
-        const existing = req.db.prepare('SELECT id FROM users WHERE email = ? COLLATE NOCASE').get(admin_email);
+        const existing = await req.db.prepare('SELECT id FROM users WHERE email = ? COLLATE NOCASE').get(admin_email);
         if (existing) {
           throw new Error(`Email ${admin_email} is already in use`);
         }
 
         const pwdHash = hashPassword(admin_password);
-        const userRes = req.db.prepare(`
+        const userRes = await req.db.prepare(`
           INSERT INTO users (email, password_hash, role, is_active)
           VALUES (?, ?, 'family_admin', 1)
         `).run(admin_email, pwdHash);
 
         adminUserId = Number(userRes.lastInsertRowid);
 
-        const personRes = req.db.prepare(`
+        const personRes = await req.db.prepare(`
           INSERT INTO persons (display_name, user_id, is_active)
           VALUES (?, ?, 1)
         `).run(admin_display_name || name + ' Admin', adminUserId);
@@ -89,7 +89,7 @@ familiesRouter.post('/', requireAuth, requireRole('super_admin'), (req: Request,
         adminPersonId = Number(personRes.lastInsertRowid);
       }
 
-      const famRes = req.db.prepare(`
+      const famRes = await req.db.prepare(`
         INSERT INTO families (name, admin_user_id, is_active)
         VALUES (?, ?, 1)
       `).run(name, adminUserId);
@@ -97,13 +97,13 @@ familiesRouter.post('/', requireAuth, requireRole('super_admin'), (req: Request,
       const familyId = Number(famRes.lastInsertRowid);
 
       if (adminPersonId) {
-        req.db.prepare(`
+        await req.db.prepare(`
           INSERT INTO family_memberships (family_id, person_id)
           VALUES (?, ?)
         `).run(familyId, adminPersonId);
       }
 
-      recordAuditLog(req.db, req.user!.id, 'CREATE_FAMILY', 'families', familyId, null, { name, adminUserId });
+      await recordAuditLog(req.db, req.user!.id, 'CREATE_FAMILY', 'families', familyId, null, { name, adminUserId });
 
       return { familyId, name, adminUserId };
     });
@@ -115,9 +115,9 @@ familiesRouter.post('/', requireAuth, requireRole('super_admin'), (req: Request,
 });
 
 // GET /api/families/:familyId - with family data isolation check
-familiesRouter.get('/:familyId', requireAuth, requireFamilyAccess('familyId'), (req: Request, res: Response) => {
+familiesRouter.get('/:familyId', requireAuth, requireFamilyAccess('familyId'), async (req: Request, res: Response) => {
   const familyId = Number(req.params.familyId);
-  const family = req.db.prepare(`
+  const family = await req.db.prepare(`
     SELECT f.id, f.name, f.admin_user_id, f.is_active, f.created_at, u.email as admin_email
     FROM families f
     LEFT JOIN users u ON f.admin_user_id = u.id
@@ -129,7 +129,7 @@ familiesRouter.get('/:familyId', requireAuth, requireFamilyAccess('familyId'), (
     return;
   }
 
-  const members = req.db.prepare(`
+  const members = await req.db.prepare(`
     SELECT p.id as person_id, p.display_name, p.user_id, u.email, u.role, fm.joined_at
     FROM family_memberships fm
     JOIN persons p ON fm.person_id = p.id
@@ -142,7 +142,7 @@ familiesRouter.get('/:familyId', requireAuth, requireFamilyAccess('familyId'), (
 });
 
 // POST /api/families/:familyId/members - Super Admin or that family's admin
-familiesRouter.post('/:familyId/members', requireAuth, requireFamilyAccess('familyId'), (req: Request, res: Response) => {
+familiesRouter.post('/:familyId/members', requireAuth, requireFamilyAccess('familyId'), async (req: Request, res: Response) => {
   const familyId = Number(req.params.familyId);
   const parseResult = addMemberSchema.safeParse(req.body);
   if (!parseResult.success) {
@@ -153,34 +153,34 @@ familiesRouter.post('/:familyId/members', requireAuth, requireFamilyAccess('fami
   const { display_name, email, password } = parseResult.data;
 
   try {
-    const member = withTransaction(req.db, () => {
+    const member = await withTransaction(req.db, async () => {
       let userId: number | null = null;
       if (email && password) {
-        const existing = req.db.prepare('SELECT id FROM users WHERE email = ? COLLATE NOCASE').get(email);
+        const existing = await req.db.prepare('SELECT id FROM users WHERE email = ? COLLATE NOCASE').get(email);
         if (existing) {
           throw new Error(`Email ${email} is already in use`);
         }
         const pwdHash = hashPassword(password);
-        const uRes = req.db.prepare(`
+        const uRes = await req.db.prepare(`
           INSERT INTO users (email, password_hash, role, is_active)
           VALUES (?, ?, 'member', 1)
         `).run(email, pwdHash);
         userId = Number(uRes.lastInsertRowid);
       }
 
-      const pRes = req.db.prepare(`
+      const pRes = await req.db.prepare(`
         INSERT INTO persons (display_name, user_id, is_active)
         VALUES (?, ?, 1)
       `).run(display_name, userId);
 
       const personId = Number(pRes.lastInsertRowid);
 
-      req.db.prepare(`
+      await req.db.prepare(`
         INSERT INTO family_memberships (family_id, person_id)
         VALUES (?, ?)
       `).run(familyId, personId);
 
-      recordAuditLog(req.db, req.user!.id, 'ADD_FAMILY_MEMBER', 'family_memberships', familyId, null, { personId, display_name, email });
+      await recordAuditLog(req.db, req.user!.id, 'ADD_FAMILY_MEMBER', 'family_memberships', familyId, null, { personId, display_name, email });
 
       return { personId, display_name, userId, email, familyId };
     });

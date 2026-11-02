@@ -7,7 +7,7 @@ import { recordAuditLog } from '../auth/audit';
 
 async function main() {
   const db = getDb();
-  runMigrations(db);
+  await runMigrations(db);
 
   const args = process.argv.slice(2);
   let email = process.env.ADMIN_EMAIL || '';
@@ -22,14 +22,14 @@ async function main() {
     else if (arg === '--update' || arg === '--reset-password') isUpdate = true;
   }
 
-  const existingAdmin = db.prepare(`
+  const existingAdmin = (await db.prepare(`
     SELECT u.id, u.email, u.role, u.is_active, p.display_name
     FROM users u
     LEFT JOIN persons p ON p.user_id = u.id
     WHERE u.role = 'super_admin'
     ORDER BY u.id ASC
     LIMIT 1
-  `).get() as { id: number; email: string; role: string; is_active: number; display_name: string | null } | undefined;
+  `).get()) as { id: number; email: string; role: string; is_active: number; display_name: string | null } | undefined;
 
   if (existingAdmin && !isUpdate) {
     console.log(`A Super Admin is already configured: ${existingAdmin.email} (User ID: ${existingAdmin.id}).`);
@@ -47,14 +47,14 @@ async function main() {
     const targetEmail = email || existingAdmin.email;
     const newHash = hashPassword(password);
 
-    db.prepare(`
+    await db.prepare(`
       UPDATE users
       SET password_hash = ?, email = ?, is_active = 1
       WHERE id = ?
     `).run(newHash, targetEmail, existingAdmin.id);
 
     if (name) {
-      db.prepare(`
+      await db.prepare(`
         UPDATE persons
         SET display_name = ?, is_active = 1
         WHERE user_id = ?
@@ -62,9 +62,9 @@ async function main() {
     }
 
     // Revoke all existing sessions for security
-    revokeAllUserSessions(db, existingAdmin.id);
+    await revokeAllUserSessions(db, existingAdmin.id);
 
-    recordAuditLog(db, existingAdmin.id, 'CLI_SUPER_ADMIN_PASSWORD_RESET', 'users', existingAdmin.id, null, {
+    await recordAuditLog(db, existingAdmin.id, 'CLI_SUPER_ADMIN_PASSWORD_RESET', 'users', existingAdmin.id, null, {
       updated_email: targetEmail,
       updated_name: name || existingAdmin.display_name,
     });
@@ -88,7 +88,7 @@ async function main() {
   }
 
   try {
-    const { user, person } = createInitialSuperAdmin(db, email, password, name);
+    const { user, person } = await createInitialSuperAdmin(db, email, password, name);
     console.log(`Successfully bootstrapped initial Super Admin: ${user.email} (Person: ${person.display_name}, User ID: ${user.id}).`);
   } catch (err) {
     console.error('Failed to set up Super Admin:', (err as Error).message);

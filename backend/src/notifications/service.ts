@@ -1,6 +1,6 @@
-import { DatabaseSync } from 'node:sqlite';
 import { formatINR } from '../finance/money';
 import { AppNotification, NotificationType, NotificationPreference } from '../types';
+import { AnyDb } from '../db/connection';
 
 export interface CreateNotificationParams {
   userId: number;
@@ -14,12 +14,12 @@ export interface CreateNotificationParams {
   eventKey?: string | null;
 }
 
-export function getNotificationPreferences(db: DatabaseSync, userId: number): NotificationPreference {
-  const row = db.prepare(`
+export async function getNotificationPreferences(db: AnyDb | any, userId: number): Promise<NotificationPreference> {
+  const row = (await db.prepare(`
     SELECT user_id, trip_notifications, expense_notifications, repayment_notifications, browser_push_enabled, push_subscription_json, updated_at
     FROM notification_preferences
     WHERE user_id = ?
-  `).get(userId) as NotificationPreference | undefined;
+  `).get(userId)) as NotificationPreference | undefined;
 
   if (row) {
     return row;
@@ -37,12 +37,12 @@ export function getNotificationPreferences(db: DatabaseSync, userId: number): No
   };
 }
 
-export function updateNotificationPreferences(
-  db: DatabaseSync,
+export async function updateNotificationPreferences(
+  db: AnyDb | any,
   userId: number,
   prefs: Partial<Pick<NotificationPreference, 'trip_notifications' | 'expense_notifications' | 'repayment_notifications' | 'browser_push_enabled' | 'push_subscription_json'>>
-): NotificationPreference {
-  const current = getNotificationPreferences(db, userId);
+): Promise<NotificationPreference> {
+  const current = await getNotificationPreferences(db, userId);
   const updated: NotificationPreference = {
     user_id: userId,
     trip_notifications: prefs.trip_notifications !== undefined ? (prefs.trip_notifications ? 1 : 0) : current.trip_notifications,
@@ -53,7 +53,7 @@ export function updateNotificationPreferences(
     updated_at: new Date().toISOString(),
   };
 
-  db.prepare(`
+  await db.prepare(`
     INSERT INTO notification_preferences (user_id, trip_notifications, expense_notifications, repayment_notifications, browser_push_enabled, push_subscription_json, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(user_id) DO UPDATE SET
@@ -76,15 +76,15 @@ export function updateNotificationPreferences(
   return updated;
 }
 
-export function createNotification(db: DatabaseSync, params: CreateNotificationParams): number | null {
+export async function createNotification(db: AnyDb | any, params: CreateNotificationParams): Promise<number | null> {
   // Check if user is active
-  const user = db.prepare('SELECT id, is_active FROM users WHERE id = ?').get(params.userId) as { id: number; is_active: number } | undefined;
+  const user = (await db.prepare('SELECT id, is_active FROM users WHERE id = ?').get(params.userId)) as { id: number; is_active: number } | undefined;
   if (!user || user.is_active !== 1) {
     return null;
   }
 
   // Check notification preferences
-  const prefs = getNotificationPreferences(db, params.userId);
+  const prefs = await getNotificationPreferences(db, params.userId);
   if (params.type.startsWith('trip_') && prefs.trip_notifications === 0) {
     return null;
   }
@@ -98,7 +98,7 @@ export function createNotification(db: DatabaseSync, params: CreateNotificationP
   const dataJson = params.data ? JSON.stringify(params.data) : null;
 
   try {
-    const res = db.prepare(`
+    const res = await db.prepare(`
       INSERT OR IGNORE INTO notifications (
         user_id, type, title, message, trip_id, expense_id, repayment_id, data_json, event_key
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -129,8 +129,8 @@ export function createNotification(db: DatabaseSync, params: CreateNotificationP
 /**
  * FEATURE 1: Trip Participant Notification Helper
  */
-export function notifyTripParticipantAdded(
-  db: DatabaseSync,
+export async function notifyTripParticipantAdded(
+  db: AnyDb | any,
   params: {
     tripId: number;
     personId: number;
@@ -138,14 +138,14 @@ export function notifyTripParticipantAdded(
     tripName?: string;
     tripDates?: string;
   }
-): void {
+): Promise<void> {
   // Look up user_id of the person
-  const person = db.prepare(`
+  const person = (await db.prepare(`
     SELECT p.id, p.display_name, p.user_id, u.email
     FROM persons p
     LEFT JOIN users u ON p.user_id = u.id
     WHERE p.id = ?
-  `).get(params.personId) as { id: number; display_name: string; user_id: number | null; email: string | null } | undefined;
+  `).get(params.personId)) as { id: number; display_name: string; user_id: number | null; email: string | null } | undefined;
 
   if (!person || !person.user_id) {
     return; // Person has no linked user account to notify in-app
@@ -160,7 +160,7 @@ export function notifyTripParticipantAdded(
   let tripName = params.tripName;
   let tripDates = params.tripDates;
   if (!tripName) {
-    const trip = db.prepare('SELECT name, destination, start_date, end_date FROM trips WHERE id = ?').get(params.tripId) as any;
+    const trip = (await db.prepare('SELECT name, destination, start_date, end_date FROM trips WHERE id = ?').get(params.tripId)) as any;
     if (trip) {
       tripName = trip.name;
       if (trip.start_date) {
@@ -173,7 +173,7 @@ export function notifyTripParticipantAdded(
 
   // Fetch addedBy person display name
   let addedByName = 'The trip organizer';
-  const adderPerson = db.prepare('SELECT display_name FROM persons WHERE user_id = ?').get(params.addedByUserId) as { display_name: string } | undefined;
+  const adderPerson = (await db.prepare('SELECT display_name FROM persons WHERE user_id = ?').get(params.addedByUserId)) as { display_name: string } | undefined;
   if (adderPerson?.display_name) {
     addedByName = adderPerson.display_name;
   }
@@ -183,7 +183,7 @@ export function notifyTripParticipantAdded(
     ? `${addedByName} added you to "${tripName}" (${tripDates}). Open trip details to confirm your attendance.`
     : `${addedByName} added you to "${tripName}". Open trip details to confirm your attendance.`;
 
-  createNotification(db, {
+  await createNotification(db, {
     userId: person.user_id,
     type: 'trip_added',
     title,
@@ -202,25 +202,25 @@ export function notifyTripParticipantAdded(
 /**
  * Notify all members of a family when the family is added to a trip
  */
-export function notifyTripFamilyAdded(
-  db: DatabaseSync,
+export async function notifyTripFamilyAdded(
+  db: AnyDb | any,
   params: {
     tripId: number;
     familyId: number;
     addedByUserId: number;
   }
-): void {
-  const members = db.prepare(`
+): Promise<void> {
+  const members = (await db.prepare(`
     SELECT person_id FROM family_memberships
     WHERE family_id = ? AND left_at IS NULL
-  `).all(params.familyId) as Array<{ person_id: number }>;
+  `).all(params.familyId)) as Array<{ person_id: number }>;
 
-  const trip = db.prepare('SELECT name, destination, start_date, end_date FROM trips WHERE id = ?').get(params.tripId) as any;
+  const trip = (await db.prepare('SELECT name, destination, start_date, end_date FROM trips WHERE id = ?').get(params.tripId)) as any;
   const tripName = trip?.name || 'Trip';
   const tripDates = trip?.start_date ? (trip.end_date ? `${trip.start_date} to ${trip.end_date}` : trip.start_date) : trip?.destination;
 
   for (const m of members) {
-    notifyTripParticipantAdded(db, {
+    await notifyTripParticipantAdded(db, {
       tripId: params.tripId,
       personId: m.person_id,
       addedByUserId: params.addedByUserId,
@@ -233,8 +233,8 @@ export function notifyTripFamilyAdded(
 /**
  * FEATURE 2: Expense Notification Helper
  */
-export function notifyExpenseAdded(
-  db: DatabaseSync,
+export async function notifyExpenseAdded(
+  db: AnyDb | any,
   params: {
     tripId: number;
     expenseId: number;
@@ -246,29 +246,29 @@ export function notifyExpenseAdded(
     familyBreakdowns?: Record<string, Array<{ id: string; amount: number }>>;
     createdByUserId: number;
   }
-): void {
+): Promise<void> {
   // Get trip info
-  const trip = db.prepare('SELECT name FROM trips WHERE id = ?').get(params.tripId) as { name: string } | undefined;
+  const trip = (await db.prepare('SELECT name FROM trips WHERE id = ?').get(params.tripId)) as { name: string } | undefined;
   const tripName = trip ? trip.name : 'Trip';
 
   // Get payer name
   let payerName = 'Someone';
   if (params.paidByType === 'person') {
-    const p = db.prepare('SELECT display_name FROM persons WHERE id = ?').get(params.paidById) as { display_name: string } | undefined;
+    const p = (await db.prepare('SELECT display_name FROM persons WHERE id = ?').get(params.paidById)) as { display_name: string } | undefined;
     if (p) payerName = p.display_name;
   } else {
-    const f = db.prepare('SELECT name FROM families WHERE id = ?').get(params.paidById) as { name: string } | undefined;
+    const f = (await db.prepare('SELECT name FROM families WHERE id = ?').get(params.paidById)) as { name: string } | undefined;
     if (f) payerName = f.name;
   }
 
   // Find all trip participants who have a user account
-  const participants = db.prepare(`
+  const participants = (await db.prepare(`
     SELECT DISTINCT p.id as person_id, p.display_name, p.user_id, fm.family_id
     FROM trip_participants tp
     JOIN persons p ON tp.person_id = p.id
     LEFT JOIN family_memberships fm ON fm.person_id = p.id AND fm.left_at IS NULL
     WHERE tp.trip_id = ? AND p.user_id IS NOT NULL AND p.is_active = 1
-  `).all(params.tripId) as Array<{ person_id: number; display_name: string; user_id: number; family_id: number | null }>;
+  `).all(params.tripId)) as Array<{ person_id: number; display_name: string; user_id: number; family_id: number | null }>;
 
   // Build lookup of shares by person id
   // 1. Direct person allocations: account key 'p:<personId>'
@@ -316,10 +316,6 @@ export function notifyExpenseAdded(
       isAssigned = true;
     }
 
-    // Compose message following prompt requirements:
-    // "New expense added — Breakfast — ₹470 — Tirupati Family Trip."
-    // Include trip name, expense title, total amount, payer, date/time, recipient assigned share if applicable.
-    // Unselected participants must NOT be shown as owing money.
     const title = `New expense added — ${params.title} — ${formattedTotal} — ${tripName}`;
 
     let message = '';
@@ -334,7 +330,7 @@ export function notifyExpenseAdded(
       message = `${payerName} paid ${formattedTotal} for "${params.title}" on ${tripName}. (You have ₹0 share in this expense).`;
     }
 
-    createNotification(db, {
+    await createNotification(db, {
       userId: p.user_id,
       type: 'new_expense',
       title,
@@ -358,8 +354,8 @@ export function notifyExpenseAdded(
 /**
  * Notify repayment to recipient and payer
  */
-export function notifyRepaymentCreated(
-  db: DatabaseSync,
+export async function notifyRepaymentCreated(
+  db: AnyDb | any,
   params: {
     tripId: number;
     repaymentId: number;
@@ -371,20 +367,20 @@ export function notifyRepaymentCreated(
     paidOn: string;
     recordedByUserId: number;
   }
-): void {
-  const trip = db.prepare('SELECT name FROM trips WHERE id = ?').get(params.tripId) as { name: string } | undefined;
+): Promise<void> {
+  const trip = (await db.prepare('SELECT name FROM trips WHERE id = ?').get(params.tripId)) as { name: string } | undefined;
   const tripName = trip ? trip.name : 'Trip';
 
   let fromName = 'Someone';
   let fromUserId: number | null = null;
   if (params.fromType === 'person') {
-    const p = db.prepare('SELECT display_name, user_id FROM persons WHERE id = ?').get(params.fromId) as any;
+    const p = (await db.prepare('SELECT display_name, user_id FROM persons WHERE id = ?').get(params.fromId)) as any;
     if (p) {
       fromName = p.display_name;
       fromUserId = p.user_id;
     }
   } else {
-    const f = db.prepare('SELECT name, admin_user_id FROM families WHERE id = ?').get(params.fromId) as any;
+    const f = (await db.prepare('SELECT name, admin_user_id FROM families WHERE id = ?').get(params.fromId)) as any;
     if (f) {
       fromName = f.name;
       fromUserId = f.admin_user_id;
@@ -394,13 +390,13 @@ export function notifyRepaymentCreated(
   let toName = 'Someone';
   let toUserId: number | null = null;
   if (params.toType === 'person') {
-    const p = db.prepare('SELECT display_name, user_id FROM persons WHERE id = ?').get(params.toId) as any;
+    const p = (await db.prepare('SELECT display_name, user_id FROM persons WHERE id = ?').get(params.toId)) as any;
     if (p) {
       toName = p.display_name;
       toUserId = p.user_id;
     }
   } else {
-    const f = db.prepare('SELECT name, admin_user_id FROM families WHERE id = ?').get(params.toId) as any;
+    const f = (await db.prepare('SELECT name, admin_user_id FROM families WHERE id = ?').get(params.toId)) as any;
     if (f) {
       toName = f.name;
       toUserId = f.admin_user_id;
@@ -414,7 +410,7 @@ export function notifyRepaymentCreated(
     const title = `Repayment received — ${formattedAmount} — ${tripName}`;
     const message = `${fromName} recorded a repayment of ${formattedAmount} to you for ${tripName}.`;
 
-    createNotification(db, {
+    await createNotification(db, {
       userId: toUserId,
       type: 'repayment',
       title,
@@ -436,7 +432,7 @@ export function notifyRepaymentCreated(
     const title = `Repayment recorded — ${formattedAmount} — ${tripName}`;
     const message = `A repayment of ${formattedAmount} to ${toName} was recorded on your behalf for ${tripName}.`;
 
-    createNotification(db, {
+    await createNotification(db, {
       userId: fromUserId,
       type: 'repayment',
       title,

@@ -20,10 +20,10 @@ const acceptInvitationSchema = z.object({
 });
 
 // GET /api/trips/:tripId/invitations - List invitations
-invitationsRouter.get('/', requireAuth, requireTripAccess('tripId'), (req: Request, res: Response) => {
+invitationsRouter.get('/', requireAuth, requireTripAccess('tripId'), async (req: Request, res: Response) => {
   const tripId = req.trip!.id;
 
-  const invitations = req.db.prepare(`
+  const invitations = await req.db.prepare(`
     SELECT i.id, i.trip_id, i.family_id, i.person_id, i.email, i.invite_code,
            i.status, i.created_by, i.created_at,
            f.name as family_name,
@@ -41,7 +41,7 @@ invitationsRouter.get('/', requireAuth, requireTripAccess('tripId'), (req: Reque
 });
 
 // POST /api/trips/:tripId/invitations - Generate an invite code
-invitationsRouter.post('/', requireAuth, requireTripAccess('tripId'), (req: Request, res: Response) => {
+invitationsRouter.post('/', requireAuth, requireTripAccess('tripId'), async (req: Request, res: Response) => {
   const tripId = req.trip!.id;
   const parseResult = createInvitationSchema.safeParse(req.body);
   if (!parseResult.success) {
@@ -53,12 +53,12 @@ invitationsRouter.post('/', requireAuth, requireTripAccess('tripId'), (req: Requ
   const inviteCode = 'TRIP-' + crypto.randomBytes(4).toString('hex').toUpperCase();
 
   try {
-    const resId = req.db.prepare(`
+    const resId = await req.db.prepare(`
       INSERT INTO invitations (trip_id, family_id, person_id, email, invite_code, status, created_by)
       VALUES (?, ?, ?, ?, ?, 'pending', ?)
     `).run(tripId, family_id || null, person_id || null, email || null, inviteCode, req.user!.id);
 
-    recordAuditLog(req.db, req.user!.id, 'CREATE_INVITATION', 'invitations', Number(resId.lastInsertRowid), null, { tripId, inviteCode });
+    await recordAuditLog(req.db, req.user!.id, 'CREATE_INVITATION', 'invitations', Number(resId.lastInsertRowid), null, { tripId, inviteCode });
 
     res.status(201).json({
       id: Number(resId.lastInsertRowid),
@@ -72,7 +72,7 @@ invitationsRouter.post('/', requireAuth, requireTripAccess('tripId'), (req: Requ
 });
 
 // POST /api/invitations/accept - Accept an invitation (supports both trip invites & family invite codes)
-globalInvitationsRouter.post('/accept', requireAuth, (req: Request, res: Response) => {
+globalInvitationsRouter.post('/accept', requireAuth, async (req: Request, res: Response) => {
   const parseResult = acceptInvitationSchema.safeParse(req.body);
   if (!parseResult.success) {
     res.status(400).json({ error: 'VALIDATION_ERROR', details: parseResult.error.format() });
@@ -87,10 +87,10 @@ globalInvitationsRouter.post('/accept', requireAuth, (req: Request, res: Respons
   }
 
   // 1. Check family_invite_codes first
-  const famCode = req.db.prepare(`
+  const famCode = (await req.db.prepare(`
     SELECT * FROM family_invite_codes
     WHERE code = ? COLLATE NOCASE
-  `).get(cleanCode) as any;
+  `).get(cleanCode)) as any;
 
   if (famCode) {
     if (famCode.status === 'revoked') {
@@ -120,12 +120,12 @@ globalInvitationsRouter.post('/accept', requireAuth, (req: Request, res: Respons
       return;
     }
 
-    withTransaction(req.db, () => {
+    await withTransaction(req.db, async () => {
       // Atomic usage check and increment
-      const updated = req.db.prepare(`
+      const updated = await req.db.prepare(`
         UPDATE family_invite_codes
         SET uses_count = uses_count + 1,
-            status = CASE WHEN uses_count + 1 >= max_uses THEN 'exhausted' ELSE status END
+                status = CASE WHEN uses_count + 1 >= max_uses THEN 'exhausted' ELSE status END
         WHERE id = ? AND status = 'active' AND uses_count < max_uses
       `).run(famCode.id);
 
@@ -133,28 +133,28 @@ globalInvitationsRouter.post('/accept', requireAuth, (req: Request, res: Respons
         throw new Error('This invitation code usage limit was reached.');
       }
 
-      req.db.prepare(`
+      await req.db.prepare(`
         INSERT OR IGNORE INTO family_memberships (family_id, person_id)
         VALUES (?, ?)
       `).run(famCode.family_id, req.person!.id);
 
-      recordAuditLog(req.db, req.user!.id, 'ACCEPT_FAMILY_INVITATION', 'family_invite_codes', famCode.id, null, {
+      await recordAuditLog(req.db, req.user!.id, 'ACCEPT_FAMILY_INVITATION', 'family_invite_codes', famCode.id, null, {
         family_id: famCode.family_id,
       });
     });
 
-    const fam = req.db.prepare('SELECT name FROM families WHERE id = ?').get(famCode.family_id) as any;
+    const fam = (await req.db.prepare('SELECT name FROM families WHERE id = ?').get(famCode.family_id)) as any;
     res.json({ message: `Successfully joined family: ${fam?.name || 'Family'}`, family_id: famCode.family_id });
     return;
   }
 
   // 2. Check trip-based invitations
-  const invite = req.db.prepare(`
+  const invite = (await req.db.prepare(`
     SELECT i.*, t.name as trip_name
     FROM invitations i
     JOIN trips t ON i.trip_id = t.id
     WHERE i.invite_code = ? COLLATE NOCASE
-  `).get(cleanCode) as any;
+  `).get(cleanCode)) as any;
 
   if (invite) {
     if (invite.status === 'accepted') {
@@ -175,22 +175,22 @@ globalInvitationsRouter.post('/accept', requireAuth, (req: Request, res: Respons
       }
     }
 
-    withTransaction(req.db, () => {
+    await withTransaction(req.db, async () => {
       // Add user's person as participant
-      req.db.prepare(`
+      await req.db.prepare(`
         INSERT OR IGNORE INTO trip_participants (trip_id, person_id, attendance)
         VALUES (?, ?, 'coming')
       `).run(invite.trip_id, req.person!.id);
 
       // If invite had a family, add family
       if (invite.family_id) {
-        req.db.prepare(`
+        await req.db.prepare(`
           INSERT OR IGNORE INTO trip_families (trip_id, family_id)
           VALUES (?, ?)
         `).run(invite.trip_id, invite.family_id);
       }
 
-      req.db.prepare(`
+      await req.db.prepare(`
         UPDATE invitations SET status = 'accepted', person_id = COALESCE(person_id, ?) WHERE id = ?
       `).run(req.person!.id, invite.id);
 
@@ -201,7 +201,7 @@ globalInvitationsRouter.post('/accept', requireAuth, (req: Request, res: Respons
         tripName: invite.trip_name,
       });
 
-      recordAuditLog(req.db, req.user!.id, 'ACCEPT_INVITATION', 'invitations', invite.id, { status: 'pending' }, { status: 'accepted' });
+      await recordAuditLog(req.db, req.user!.id, 'ACCEPT_INVITATION', 'invitations', invite.id, { status: 'pending' }, { status: 'accepted' });
     });
 
     res.json({ message: `Successfully joined trip: ${invite.trip_name}`, trip_id: invite.trip_id });

@@ -26,11 +26,11 @@ const assumptionSchema = z.object({
 });
 
 // GET /api/trips/:tripId/ledger - Full ledger with balances and settlement suggestions
-settlementsRouter.get('/ledger', requireAuth, requireTripAccess('tripId'), (req: Request, res: Response) => {
+settlementsRouter.get('/ledger', requireAuth, requireTripAccess('tripId'), async (req: Request, res: Response) => {
   const tripId = req.trip!.id;
 
   try {
-    const { expenses, repayments, assumptions } = loadTripFinancialRecords(req.db, tripId);
+    const { expenses, repayments, assumptions } = await loadTripFinancialRecords(req.db, tripId);
     const balances = computeBalances(expenses, repayments, assumptions);
 
     // Verify zero-sum reconciliation
@@ -40,14 +40,14 @@ settlementsRouter.get('/ledger', requireAuth, requireTripAccess('tripId'), (req:
     const status = settlementStatus(balances);
 
     // Lookup account names
-    const enrichedBalances = Object.entries(balances).map(([key, b]) => {
+    const enrichedBalances = await Promise.all(Object.entries(balances).map(async ([key, b]) => {
       const { type, id } = keyToAccount(key);
       let name = key;
       if (type === 'person') {
-        const row = req.db.prepare('SELECT display_name FROM persons WHERE id = ?').get(id) as { display_name: string } | undefined;
+        const row = (await req.db.prepare('SELECT display_name FROM persons WHERE id = ?').get(id)) as { display_name: string } | undefined;
         if (row) name = row.display_name;
       } else {
-        const row = req.db.prepare('SELECT name FROM families WHERE id = ?').get(id) as { name: string } | undefined;
+        const row = (await req.db.prepare('SELECT name FROM families WHERE id = ?').get(id)) as { name: string } | undefined;
         if (row) name = row.name;
       }
 
@@ -66,27 +66,27 @@ settlementsRouter.get('/ledger', requireAuth, requireTripAccess('tripId'), (req:
         formattedNet: formatINR(b.net),
         status: b.net > 0 ? 'receives' : b.net < 0 ? 'owes' : 'settled',
       };
-    });
+    }));
 
-    const enrichedSuggestions = suggestions.map(s => {
+    const enrichedSuggestions = await Promise.all(suggestions.map(async s => {
       const fromAcct = keyToAccount(s.from);
       const toAcct = keyToAccount(s.to);
       let fromName = s.from;
       let toName = s.to;
 
       if (fromAcct.type === 'person') {
-        const row = req.db.prepare('SELECT display_name FROM persons WHERE id = ?').get(fromAcct.id) as any;
+        const row = (await req.db.prepare('SELECT display_name FROM persons WHERE id = ?').get(fromAcct.id)) as any;
         if (row) fromName = row.display_name;
       } else {
-        const row = req.db.prepare('SELECT name FROM families WHERE id = ?').get(fromAcct.id) as any;
+        const row = (await req.db.prepare('SELECT name FROM families WHERE id = ?').get(fromAcct.id)) as any;
         if (row) fromName = row.name;
       }
 
       if (toAcct.type === 'person') {
-        const row = req.db.prepare('SELECT display_name FROM persons WHERE id = ?').get(toAcct.id) as any;
+        const row = (await req.db.prepare('SELECT display_name FROM persons WHERE id = ?').get(toAcct.id)) as any;
         if (row) toName = row.display_name;
       } else {
-        const row = req.db.prepare('SELECT name FROM families WHERE id = ?').get(toAcct.id) as any;
+        const row = (await req.db.prepare('SELECT name FROM families WHERE id = ?').get(toAcct.id)) as any;
         if (row) toName = row.name;
       }
 
@@ -102,7 +102,7 @@ settlementsRouter.get('/ledger', requireAuth, requireTripAccess('tripId'), (req:
         amount: s.amount,
         formattedAmount: formatINR(s.amount),
       };
-    });
+    }));
 
     const totalGroupSpend = expenses.reduce((a, e) => a + e.total, 0);
     const totalRepayments = repayments.reduce((a, r) => a + r.amount, 0);
@@ -122,7 +122,7 @@ settlementsRouter.get('/ledger', requireAuth, requireTripAccess('tripId'), (req:
 });
 
 // POST /api/trips/:tripId/assumptions - Record a covered share / debt assumption
-settlementsRouter.post('/assumptions', requireAuth, requireTripAccess('tripId'), (req: Request, res: Response) => {
+settlementsRouter.post('/assumptions', requireAuth, requireTripAccess('tripId'), async (req: Request, res: Response) => {
   const tripId = req.trip!.id;
   const parseResult = assumptionSchema.safeParse(req.body);
   if (!parseResult.success) {
@@ -144,8 +144,8 @@ settlementsRouter.post('/assumptions', requireAuth, requireTripAccess('tripId'),
   }
 
   try {
-    const saved = withTransaction(req.db, () => {
-      const res = req.db.prepare(`
+    const saved = await withTransaction(req.db, async () => {
+      const res = await req.db.prepare(`
         INSERT INTO debt_assumptions (trip_id, debtor_type, debtor_id, assumed_by_type, assumed_by_id, amount_paise, recorded_by)
         VALUES (?, ?, ?, ?, ?, ?, ?)
       `).run(

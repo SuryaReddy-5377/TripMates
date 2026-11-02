@@ -40,7 +40,7 @@ const updateTripSchema = z.object({
 });
 
 // GET /api/trips - Scoped list of accessible trips
-tripsRouter.get('/', requireAuth, (req: Request, res: Response) => {
+tripsRouter.get('/', requireAuth, async (req: Request, res: Response) => {
   const isSuperAdmin = req.user!.role === 'super_admin';
   const userId = req.user!.id;
   const personId = req.person?.id ?? -1;
@@ -74,8 +74,8 @@ tripsRouter.get('/', requireAuth, (req: Request, res: Response) => {
   query += ` ORDER BY t.created_at DESC`;
 
   const rows = isSuperAdmin
-    ? req.db.prepare(query).all(familyId, personId)
-    : req.db.prepare(query).all(familyId, personId, userId);
+    ? await req.db.prepare(query).all(familyId, personId)
+    : await req.db.prepare(query).all(familyId, personId, userId);
 
   // Filter out private completed trips for users who did not attend
   const visibleTrips = rows.filter((t: any) => {
@@ -90,7 +90,7 @@ tripsRouter.get('/', requireAuth, (req: Request, res: Response) => {
 });
 
 // POST /api/trips - Create trip
-tripsRouter.post('/', requireAuth, (req: Request, res: Response) => {
+tripsRouter.post('/', requireAuth, async (req: Request, res: Response) => {
   const parseResult = createTripSchema.safeParse(req.body);
   if (!parseResult.success) {
     res.status(400).json({ error: 'VALIDATION_ERROR', details: parseResult.error.format() });
@@ -108,8 +108,8 @@ tripsRouter.post('/', requireAuth, (req: Request, res: Response) => {
   const isPrivateNum = Boolean(data.is_private) ? 1 : 0;
 
   try {
-    const createdTrip = withTransaction(req.db, () => {
-      const tripRes = req.db.prepare(`
+    const createdTrip = await withTransaction(req.db, async () => {
+      const tripRes = await req.db.prepare(`
         INSERT INTO trips (name, destination, start_date, end_date, description, notes, cover_image, budget_paise, is_private, created_by)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
@@ -131,16 +131,16 @@ tripsRouter.post('/', requireAuth, (req: Request, res: Response) => {
       const participantSet = new Set<number>(data.participant_person_ids);
 
       for (const famId of data.family_ids) {
-        req.db.prepare(`
+        await req.db.prepare(`
           INSERT OR IGNORE INTO trip_families (trip_id, family_id)
           VALUES (?, ?)
         `).run(tripId, famId);
 
         // Fetch members of this family and add to participant set
-        const members = req.db.prepare(`
+        const members = (await req.db.prepare(`
           SELECT person_id FROM family_memberships
           WHERE family_id = ? AND left_at IS NULL
-        `).all(famId) as Array<{ person_id: number }>;
+        `).all(famId)) as Array<{ person_id: number }>;
 
         for (const m of members) {
           participantSet.add(m.person_id);
@@ -154,7 +154,7 @@ tripsRouter.post('/', requireAuth, (req: Request, res: Response) => {
 
       // Insert trip_participants and notify
       for (const personId of participantSet) {
-        req.db.prepare(`
+        await req.db.prepare(`
           INSERT OR IGNORE INTO trip_participants (trip_id, person_id, attendance)
           VALUES (?, ?, 'pending')
         `).run(tripId, personId);
@@ -180,11 +180,11 @@ tripsRouter.post('/', requireAuth, (req: Request, res: Response) => {
 });
 
 // GET /api/trips/:tripId - With access control & completed private restriction
-tripsRouter.get('/:tripId', requireAuth, requireTripAccess('tripId'), (req: Request, res: Response) => {
+tripsRouter.get('/:tripId', requireAuth, requireTripAccess('tripId'), async (req: Request, res: Response) => {
   const trip = req.trip!;
 
   // Fetch participating families
-  const families = req.db.prepare(`
+  const families = await req.db.prepare(`
     SELECT f.id, f.name
     FROM trip_families tf
     JOIN families f ON tf.family_id = f.id
@@ -193,7 +193,7 @@ tripsRouter.get('/:tripId', requireAuth, requireTripAccess('tripId'), (req: Requ
   `).all(trip.id);
 
   // Fetch participants with their family affiliation and current attendance
-  const participants = req.db.prepare(`
+  const participants = await req.db.prepare(`
     SELECT p.id, p.display_name, tp.attendance, tp.responded_at,
            f.id as family_id, f.name as family_name,
            u.id as user_id, u.email
@@ -214,7 +214,7 @@ tripsRouter.get('/:tripId', requireAuth, requireTripAccess('tripId'), (req: Requ
 });
 
 // PATCH /api/trips/:tripId
-tripsRouter.patch('/:tripId', requireAuth, requireTripAccess('tripId'), (req: Request, res: Response) => {
+tripsRouter.patch('/:tripId', requireAuth, requireTripAccess('tripId'), async (req: Request, res: Response) => {
   const parseResult = updateTripSchema.safeParse(req.body);
   if (!parseResult.success) {
     res.status(400).json({ error: 'VALIDATION_ERROR', details: parseResult.error.format() });
@@ -248,8 +248,8 @@ tripsRouter.patch('/:tripId', requireAuth, requireTripAccess('tripId'), (req: Re
   const updatedPrivate = data.is_private !== undefined ? (Boolean(data.is_private) ? 1 : 0) : trip.is_private;
   const completedAt = updatedStatus === 'completed' && !trip.completed_at ? new Date().toISOString() : trip.completed_at;
 
-  withTransaction(req.db, () => {
-    req.db.prepare(`
+  await withTransaction(req.db, async () => {
+    await req.db.prepare(`
       UPDATE trips
       SET name = ?, destination = ?, start_date = ?, end_date = ?, description = ?, notes = ?,
           cover_image = ?, budget_paise = ?, status = ?, is_private = ?, completed_at = ?
@@ -272,23 +272,23 @@ tripsRouter.patch('/:tripId', requireAuth, requireTripAccess('tripId'), (req: Re
     // If new families provided, insert them and their members
     if (data.family_ids && data.family_ids.length > 0) {
       for (const famId of data.family_ids) {
-        req.db.prepare(`
+        await req.db.prepare(`
           INSERT OR IGNORE INTO trip_families (trip_id, family_id)
           VALUES (?, ?)
         `).run(trip.id, famId);
 
-        const members = req.db.prepare(`
+        const members = (await req.db.prepare(`
           SELECT person_id FROM family_memberships
           WHERE family_id = ? AND left_at IS NULL
-        `).all(famId) as Array<{ person_id: number }>;
+        `).all(famId)) as Array<{ person_id: number }>;
 
         for (const m of members) {
-          const existing = req.db.prepare(`
+          const existing = await req.db.prepare(`
             SELECT id FROM trip_participants WHERE trip_id = ? AND person_id = ?
           `).get(trip.id, m.person_id);
 
           if (!existing) {
-            req.db.prepare(`
+            await req.db.prepare(`
               INSERT INTO trip_participants (trip_id, person_id, attendance)
               VALUES (?, ?, 'pending')
             `).run(trip.id, m.person_id);
@@ -308,12 +308,12 @@ tripsRouter.patch('/:tripId', requireAuth, requireTripAccess('tripId'), (req: Re
     // If specific participant_person_ids provided
     if (data.participant_person_ids && data.participant_person_ids.length > 0) {
       for (const personId of data.participant_person_ids) {
-        const existing = req.db.prepare(`
+        const existing = await req.db.prepare(`
           SELECT id FROM trip_participants WHERE trip_id = ? AND person_id = ?
         `).get(trip.id, personId);
 
         if (!existing) {
-          req.db.prepare(`
+          await req.db.prepare(`
             INSERT INTO trip_participants (trip_id, person_id, attendance)
             VALUES (?, ?, 'pending')
           `).run(trip.id, personId);
@@ -336,7 +336,7 @@ tripsRouter.patch('/:tripId', requireAuth, requireTripAccess('tripId'), (req: Re
 });
 
 // POST /api/trips/:tripId/complete - Mark trip as completed
-tripsRouter.post('/:tripId/complete', requireAuth, requireTripAccess('tripId'), (req: Request, res: Response) => {
+tripsRouter.post('/:tripId/complete', requireAuth, requireTripAccess('tripId'), async (req: Request, res: Response) => {
   const trip = req.trip!;
   if (req.user!.role !== 'super_admin' && trip.created_by !== req.user!.id) {
     res.status(403).json({ error: 'FORBIDDEN', message: 'Only trip creator or super admin can mark trip as completed' });
@@ -344,7 +344,7 @@ tripsRouter.post('/:tripId/complete', requireAuth, requireTripAccess('tripId'), 
   }
 
   const completedAt = new Date().toISOString();
-  req.db.prepare(`
+  await req.db.prepare(`
     UPDATE trips
     SET status = 'completed', completed_at = ?
     WHERE id = ?
@@ -356,7 +356,7 @@ tripsRouter.post('/:tripId/complete', requireAuth, requireTripAccess('tripId'), 
 });
 
 // POST /api/trips/:tripId/participants - Add participant to trip
-tripsRouter.post('/:tripId/participants', requireAuth, requireTripAccess('tripId'), (req: Request, res: Response) => {
+tripsRouter.post('/:tripId/participants', requireAuth, requireTripAccess('tripId'), async (req: Request, res: Response) => {
   const { person_id } = req.body;
   const personId = Number(person_id);
   if (!personId || isNaN(personId)) {
@@ -365,8 +365,8 @@ tripsRouter.post('/:tripId/participants', requireAuth, requireTripAccess('tripId
   }
 
   const trip = req.trip!;
-  withTransaction(req.db, () => {
-    req.db.prepare(`
+  await withTransaction(req.db, async () => {
+    await req.db.prepare(`
       INSERT OR IGNORE INTO trip_participants (trip_id, person_id, attendance)
       VALUES (?, ?, 'pending')
     `).run(trip.id, personId);
@@ -384,7 +384,7 @@ tripsRouter.post('/:tripId/participants', requireAuth, requireTripAccess('tripId
 });
 
 // POST /api/trips/:tripId/families - Add family to trip
-tripsRouter.post('/:tripId/families', requireAuth, requireTripAccess('tripId'), (req: Request, res: Response) => {
+tripsRouter.post('/:tripId/families', requireAuth, requireTripAccess('tripId'), async (req: Request, res: Response) => {
   const { family_id } = req.body;
   const familyId = Number(family_id);
   if (!familyId || isNaN(familyId)) {
@@ -393,20 +393,20 @@ tripsRouter.post('/:tripId/families', requireAuth, requireTripAccess('tripId'), 
   }
 
   const trip = req.trip!;
-  withTransaction(req.db, () => {
-    req.db.prepare(`
+  await withTransaction(req.db, async () => {
+    await req.db.prepare(`
       INSERT OR IGNORE INTO trip_families (trip_id, family_id)
       VALUES (?, ?)
     `).run(trip.id, familyId);
 
     // Also add family members to trip_participants and notify
-    const members = req.db.prepare(`
+    const members = (await req.db.prepare(`
       SELECT person_id FROM family_memberships
       WHERE family_id = ? AND left_at IS NULL
-    `).all(familyId) as Array<{ person_id: number }>;
+    `).all(familyId)) as Array<{ person_id: number }>;
 
     for (const m of members) {
-      req.db.prepare(`
+      await req.db.prepare(`
         INSERT OR IGNORE INTO trip_participants (trip_id, person_id, attendance)
         VALUES (?, ?, 'pending')
       `).run(trip.id, m.person_id);
@@ -437,9 +437,9 @@ const createPlaceSchema = z.object({
 });
 
 // GET /api/trips/:tripId/places - Retrieve all visiting places in itinerary order
-tripsRouter.get('/:tripId/places', requireAuth, requireTripAccess('tripId'), (req: Request, res: Response) => {
+tripsRouter.get('/:tripId/places', requireAuth, requireTripAccess('tripId'), async (req: Request, res: Response) => {
   const trip = req.trip!;
-  const places = req.db.prepare(`
+  const places = await req.db.prepare(`
     SELECT tp.id, tp.trip_id, tp.name, tp.latitude, tp.longitude,
            tp.order_index, tp.notes, tp.planned_date, tp.created_by,
            tp.created_at, tp.updated_at,
@@ -461,7 +461,7 @@ tripsRouter.get('/:tripId/places', requireAuth, requireTripAccess('tripId'), (re
 });
 
 // POST /api/trips/:tripId/places - Add a new visiting place (authorized trip creator or super admin only)
-tripsRouter.post('/:tripId/places', requireAuth, requireTripAccess('tripId'), (req: Request, res: Response) => {
+tripsRouter.post('/:tripId/places', requireAuth, requireTripAccess('tripId'), async (req: Request, res: Response) => {
   const trip = req.trip!;
   const isAuthorized = req.user!.role === 'super_admin' || trip.created_by === req.user!.id;
   if (!isAuthorized) {
@@ -478,25 +478,25 @@ tripsRouter.post('/:tripId/places', requireAuth, requireTripAccess('tripId'), (r
   const { name, latitude, longitude, notes, planned_date } = parseResult.data;
 
   // Compute next order index
-  const maxOrderRow = req.db.prepare(`
+  const maxOrderRow = (await req.db.prepare(`
     SELECT COALESCE(MAX(order_index), -1) as max_order
     FROM trip_places
     WHERE trip_id = ?
-  `).get(trip.id) as { max_order: number };
+  `).get(trip.id)) as { max_order: number };
 
   const nextOrder = maxOrderRow.max_order + 1;
 
-  const insertRes = req.db.prepare(`
+  const insertRes = await req.db.prepare(`
     INSERT INTO trip_places (trip_id, name, latitude, longitude, order_index, notes, planned_date, created_by)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `).run(trip.id, name, latitude, longitude, nextOrder, notes || null, planned_date || null, req.user!.id);
 
-  const newPlace = req.db.prepare('SELECT * FROM trip_places WHERE id = ?').get(insertRes.lastInsertRowid);
+  const newPlace = await req.db.prepare('SELECT * FROM trip_places WHERE id = ?').get(insertRes.lastInsertRowid);
   res.status(201).json(newPlace);
 });
 
 // PUT /api/trips/:tripId/places/reorder - Reorder visiting places (authorized trip creator or super admin only)
-tripsRouter.put('/:tripId/places/reorder', requireAuth, requireTripAccess('tripId'), (req: Request, res: Response) => {
+tripsRouter.put('/:tripId/places/reorder', requireAuth, requireTripAccess('tripId'), async (req: Request, res: Response) => {
   const trip = req.trip!;
   const isAuthorized = req.user!.role === 'super_admin' || trip.created_by === req.user!.id;
   if (!isAuthorized) {
@@ -510,17 +510,18 @@ tripsRouter.put('/:tripId/places/reorder', requireAuth, requireTripAccess('tripI
     return;
   }
 
-  withTransaction(req.db, () => {
-    place_ids.forEach((placeId, index) => {
-      req.db.prepare(`
+  await withTransaction(req.db, async () => {
+    for (let index = 0; index < place_ids.length; index++) {
+      const placeId = place_ids[index];
+      await req.db.prepare(`
         UPDATE trip_places
         SET order_index = ?, updated_at = datetime('now')
         WHERE id = ? AND trip_id = ?
       `).run(index, Number(placeId), trip.id);
-    });
+    }
   });
 
-  const updatedPlaces = req.db.prepare(`
+  const updatedPlaces = await req.db.prepare(`
     SELECT * FROM trip_places
     WHERE trip_id = ?
     ORDER BY order_index ASC, id ASC
@@ -530,7 +531,7 @@ tripsRouter.put('/:tripId/places/reorder', requireAuth, requireTripAccess('tripI
 });
 
 // DELETE /api/trips/:tripId/places/:placeId - Remove a visiting place (authorized trip creator or super admin only)
-tripsRouter.delete('/:tripId/places/:placeId', requireAuth, requireTripAccess('tripId'), (req: Request, res: Response) => {
+tripsRouter.delete('/:tripId/places/:placeId', requireAuth, requireTripAccess('tripId'), async (req: Request, res: Response) => {
   const trip = req.trip!;
   const isAuthorized = req.user!.role === 'super_admin' || trip.created_by === req.user!.id;
   if (!isAuthorized) {
@@ -539,13 +540,13 @@ tripsRouter.delete('/:tripId/places/:placeId', requireAuth, requireTripAccess('t
   }
 
   const placeId = Number(req.params.placeId);
-  const existing = req.db.prepare('SELECT id FROM trip_places WHERE id = ? AND trip_id = ?').get(placeId, trip.id);
+  const existing = await req.db.prepare('SELECT id FROM trip_places WHERE id = ? AND trip_id = ?').get(placeId, trip.id);
   if (!existing) {
     res.status(404).json({ error: 'NOT_FOUND', message: 'Visiting place not found for this trip' });
     return;
   }
 
-  req.db.prepare('DELETE FROM trip_places WHERE id = ? AND trip_id = ?').run(placeId, trip.id);
+  await req.db.prepare('DELETE FROM trip_places WHERE id = ? AND trip_id = ?').run(placeId, trip.id);
   res.json({ message: 'Visiting place removed successfully', id: placeId });
 });
 
