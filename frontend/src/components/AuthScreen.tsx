@@ -214,6 +214,14 @@ export const AuthScreen: React.FC<Props> = ({
         <img
           src="/images/hero-beach.jpg"
           alt="Family Beach Holiday"
+          onError={(e) => {
+            const target = e.target as HTMLImageElement;
+            if (target.src.includes('hero-beach.jpg')) {
+              target.src = '/images/beach_vacation.jpg';
+            } else if (target.src.includes('beach_vacation.jpg')) {
+              target.src = '/images/hero_family_trip.jpg';
+            }
+          }}
           style={{
             position: 'absolute',
             inset: 0,
