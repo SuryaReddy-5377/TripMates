@@ -2,12 +2,14 @@
 
 CREATE TABLE IF NOT EXISTS suggestions (
   id SERIAL PRIMARY KEY,
-  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   person_id INTEGER REFERENCES persons(id) ON DELETE SET NULL,
-  category TEXT NOT NULL CHECK (category IN ('feature', 'improvement', 'feedback', 'bug', 'other')),
+  sender_name TEXT NOT NULL,
+  sender_email TEXT NOT NULL,
   title TEXT NOT NULL,
   message TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'reviewed', 'planned', 'resolved', 'dismissed')),
+  category TEXT NOT NULL DEFAULT 'feature' CHECK (category IN ('feature', 'improvement', 'bug', 'feedback', 'other')),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'reviewed', 'resolved', 'open', 'planned', 'dismissed')),
   admin_notes TEXT,
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -15,4 +17,5 @@ CREATE TABLE IF NOT EXISTS suggestions (
 
 CREATE INDEX IF NOT EXISTS ix_suggestions_user ON suggestions(user_id);
 CREATE INDEX IF NOT EXISTS ix_suggestions_status ON suggestions(status);
+CREATE INDEX IF NOT EXISTS ix_suggestions_created_at ON suggestions(created_at DESC);
 

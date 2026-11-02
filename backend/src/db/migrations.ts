@@ -124,6 +124,32 @@ export async function runPostgresMigrations(db: AnyDb, migrationsDir?: string): 
       // Ignore if table doesn't exist yet or column already updated
     }
 
+    // Ensure sender_name, sender_email exist on suggestions (in case 006 previously ran without them)
+    try {
+      await client.query('ALTER TABLE suggestions ADD COLUMN IF NOT EXISTS sender_name TEXT');
+      await client.query('ALTER TABLE suggestions ADD COLUMN IF NOT EXISTS sender_email TEXT');
+      await client.query(`
+        DO $$
+        BEGIN
+          ALTER TABLE suggestions DROP CONSTRAINT IF EXISTS suggestions_status_check;
+          ALTER TABLE suggestions ADD CONSTRAINT suggestions_status_check CHECK (status IN ('pending', 'reviewed', 'resolved', 'open', 'planned', 'dismissed'));
+        EXCEPTION
+          WHEN OTHERS THEN NULL;
+        END $$;
+      `);
+      await client.query(`
+        UPDATE suggestions s
+        SET 
+          sender_name = COALESCE(s.sender_name, p.display_name, 'User'),
+          sender_email = COALESCE(s.sender_email, u.email, 'user@tripmates.local')
+        FROM users u
+        LEFT JOIN persons p ON p.user_id = u.id
+        WHERE s.user_id = u.id AND (s.sender_name IS NULL OR s.sender_email IS NULL);
+      `);
+    } catch {
+      // Ignore if table doesn't exist yet
+    }
+
     return { applied, skipped };
   } finally {
     client.release();

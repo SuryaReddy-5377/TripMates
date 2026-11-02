@@ -25,6 +25,13 @@ export interface AnyDb {
 
 const txStorage = new AsyncLocalStorage<pg.PoolClient>();
 
+const TABLES_WITHOUT_ID = new Set([
+  'trip_families',
+  'trip_participants',
+  'notification_preferences',
+  'schema_migrations',
+]);
+
 export function translateToPg(sql: string): { sql: string; isInsert: boolean } {
   let translated = sql;
 
@@ -43,12 +50,15 @@ export function translateToPg(sql: string): { sql: string; isInsert: boolean } {
     translated = translated.replace(/INSERT\s+OR\s+IGNORE\s+INTO/gi, 'INSERT INTO');
   }
 
-  // 5. If INSERT statement without RETURNING, append RETURNING id
-  const isInsert = /^\s*INSERT\s+INTO\s+/i.test(translated);
+  // 5. If INSERT statement without RETURNING, append RETURNING id ONLY if table has an id column
+  const insertMatch = translated.match(/^\s*INSERT\s+INTO\s+([a-zA-Z0-9_]+)/i);
+  const isInsert = Boolean(insertMatch);
   if (isInsert && !/\bRETURNING\b/i.test(translated)) {
+    const tableName = insertMatch![1].toLowerCase();
+    const hasNoId = TABLES_WITHOUT_ID.has(tableName);
     if (hadInsertOrIgnore && !/\bON\s+CONFLICT\b/i.test(translated)) {
-      translated = translated.trim() + ' ON CONFLICT DO NOTHING RETURNING id';
-    } else {
+      translated = translated.trim() + (hasNoId ? ' ON CONFLICT DO NOTHING' : ' ON CONFLICT DO NOTHING RETURNING id');
+    } else if (!hasNoId) {
       translated = translated.trim() + ' RETURNING id';
     }
   }

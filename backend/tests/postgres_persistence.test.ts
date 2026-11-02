@@ -20,11 +20,23 @@ test('PostgreSQL Persistence: SQL translator converts SQLite dialect to PostgreS
   assert.ok(q3.sql.endsWith('RETURNING id'), 'Should append RETURNING id');
   assert.ok(q3.sql.includes('VALUES ($1, $2)'), 'Should replace ? with $1, $2');
 
-  // 4. INSERT OR IGNORE INTO -> ON CONFLICT DO NOTHING RETURNING id
+  // 4. INSERT OR IGNORE INTO -> ON CONFLICT DO NOTHING (respecting table schema for RETURNING id)
   const q4 = translateToPg('INSERT OR IGNORE INTO trip_participants (trip_id, person_id) VALUES (?, ?)');
   assert.ok(!q4.sql.includes('OR IGNORE'), 'OR IGNORE must be replaced');
-  assert.ok(q4.sql.includes('ON CONFLICT DO NOTHING RETURNING id'), 'Must add ON CONFLICT DO NOTHING');
+  assert.ok(q4.sql.includes('ON CONFLICT DO NOTHING'), 'Must add ON CONFLICT DO NOTHING');
+  assert.ok(!q4.sql.includes('RETURNING id'), 'trip_participants has no id column, must not append RETURNING id');
   assert.ok(q4.sql.includes('VALUES ($1, $2)'));
+
+  const q4b = translateToPg('INSERT OR IGNORE INTO trip_families (trip_id, family_id) VALUES (?, ?)');
+  assert.ok(!q4b.sql.includes('RETURNING id'), 'trip_families has no id column, must not append RETURNING id');
+
+  const q4c = translateToPg('INSERT OR IGNORE INTO family_invite_codes (code, family_id) VALUES (?, ?)');
+  assert.ok(q4c.sql.includes('ON CONFLICT DO NOTHING RETURNING id'), 'Tables with id column must append RETURNING id');
+
+  // Verify suggestions query translation preserves sender_name and sender_email
+  const qSug = translateToPg('INSERT INTO suggestions (user_id, person_id, sender_name, sender_email, title, message, category, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+  assert.ok(qSug.sql.includes('RETURNING id'), 'suggestions has id column and must append RETURNING id');
+  assert.ok(qSug.sql.includes('$1, $2, $3, $4, $5, $6, $7, $8'), 'Must map 8 placeholders');
 
   // 5. Parameter indexing with multiple placeholders
   const q5 = translateToPg('SELECT id FROM family_memberships WHERE family_id = ? AND person_id = ? AND left_at IS NULL');
