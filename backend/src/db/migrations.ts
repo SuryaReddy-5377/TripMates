@@ -109,6 +109,21 @@ export async function runPostgresMigrations(db: AnyDb, migrationsDir?: string): 
       }
     }
 
+    // Ensure cover_image column exists on trips (in case 005 previously ran with cover_image_url)
+    try {
+      await client.query('ALTER TABLE trips ADD COLUMN IF NOT EXISTS cover_image TEXT');
+      await client.query(`
+        DO $$
+        BEGIN
+          IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='trips' AND column_name='cover_image_url') THEN
+            UPDATE trips SET cover_image = cover_image_url WHERE cover_image IS NULL AND cover_image_url IS NOT NULL;
+          END IF;
+        END $$;
+      `);
+    } catch {
+      // Ignore if table doesn't exist yet or column already updated
+    }
+
     return { applied, skipped };
   } finally {
     client.release();

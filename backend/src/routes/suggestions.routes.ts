@@ -6,7 +6,7 @@ export const suggestionsRouter = Router();
 
 const createSuggestionSchema = z.object({
   title: z.string().trim().min(1, 'Title is required').max(200, 'Title too long'),
-  message: z.string().trim().min(3, 'Message must be at least 3 characters').max(5000, 'Message too long'),
+  message: z.string().trim().max(5000, 'Message too long').optional().default(''),
   category: z.enum(['feature', 'improvement', 'bug', 'feedback', 'other']).default('feature'),
 });
 
@@ -24,6 +24,7 @@ suggestionsRouter.post('/', requireAuth, async (req: Request, res: Response) => 
 
   const senderName = (person?.display_name || user.email.split('@')[0] || 'User').trim();
   const senderEmail = user.email.trim();
+  const finalMessage = message && message.trim().length > 0 ? message.trim() : title;
 
   try {
     const insertRes = await req.db.prepare(`
@@ -37,7 +38,7 @@ suggestionsRouter.post('/', requireAuth, async (req: Request, res: Response) => 
       senderName,
       senderEmail,
       title,
-      message,
+      finalMessage,
       category
     );
 

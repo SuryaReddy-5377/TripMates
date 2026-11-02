@@ -44,17 +44,13 @@ export const SuggestionModal: React.FC<Props> = ({ user, person, onClose }) => {
       setErrorMsg('Please enter a title for your suggestion.');
       return;
     }
-    if (message.trim().length < 3) {
-      setErrorMsg('Please enter more details (at least 3 characters).');
-      return;
-    }
 
     try {
       setIsSubmitting(true);
       setErrorMsg(null);
       await api.post('/suggestions', {
         title: title.trim(),
-        message: message.trim(),
+        message: message.trim() || title.trim(),
         category,
       });
       setIsSuccess(true);
@@ -270,7 +266,7 @@ export const SuggestionModal: React.FC<Props> = ({ user, person, onClose }) => {
             {/* Message field */}
             <div>
               <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#0f172a', marginBottom: '0.35rem' }}>
-                {t.suggestionMessage} *
+                {t.suggestionMessage} <span style={{ fontWeight: 400, color: '#94a3b8', fontSize: '0.75rem' }}>(optional)</span>
               </label>
               <textarea
                 className="form-input"
@@ -279,7 +275,6 @@ export const SuggestionModal: React.FC<Props> = ({ user, person, onClose }) => {
                 value={message}
                 onChange={e => setMessage(e.target.value)}
                 maxLength={5000}
-                required
                 style={{
                   width: '100%',
                   boxSizing: 'border-box',
@@ -310,7 +305,7 @@ export const SuggestionModal: React.FC<Props> = ({ user, person, onClose }) => {
               <button
                 type="submit"
                 className="btn-primary"
-                disabled={isSubmitting || !title.trim() || !message.trim()}
+                disabled={isSubmitting || !title.trim()}
                 style={{
                   padding: '0.6rem 1.35rem',
                   borderRadius: '10px',

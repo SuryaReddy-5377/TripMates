@@ -62,16 +62,16 @@ export const NotificationCenter: React.FC<Props> = ({ onSelectTrip }) => {
 
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const fetchNotifications = async () => {
+  const fetchNotifications = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const res = await api.get('/notifications?limit=40');
       setNotifications(res.notifications || []);
       setUnreadCount(res.unread_count || 0);
     } catch (err) {
       console.error('Failed to fetch notifications:', err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -90,17 +90,18 @@ export const NotificationCenter: React.FC<Props> = ({ onSelectTrip }) => {
   };
 
   useEffect(() => {
-    fetchNotifications();
+    fetchNotifications(false);
     fetchPreferences();
 
     if (typeof window !== 'undefined' && 'Notification' in window) {
       setBrowserPermission(Notification.permission);
     }
 
-    // Polling every 30 seconds for live notifications
+    // Polling every 60 seconds silently only when page is visible
     const interval = setInterval(() => {
-      fetchNotifications();
-    }, 30000);
+      if (typeof document !== 'undefined' && document.hidden) return;
+      fetchNotifications(true);
+    }, 60000);
 
     return () => clearInterval(interval);
   }, []);
