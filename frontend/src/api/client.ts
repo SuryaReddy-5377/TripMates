@@ -33,9 +33,9 @@ export async function request<T = any>(endpoint: string, options: RequestInit = 
     cleanEndpoint = cleanEndpoint.slice(4);
   }
 
-  // 15-second AbortController timeout to prevent hanging requests on network hiccups
+  // 90-second timeout to allow Render Free tier instances to wake up from cold spin-down
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000);
+  const timeoutId = setTimeout(() => controller.abort(), 90000);
 
   let response: Response;
   try {
@@ -48,7 +48,7 @@ export async function request<T = any>(endpoint: string, options: RequestInit = 
   } catch (fetchErr: any) {
     clearTimeout(timeoutId);
     if (fetchErr.name === 'AbortError') {
-      throw new Error('Connection timed out. The server is taking longer than expected to respond.');
+      throw new Error('Connection timed out. On Render Free, cold start takes up to a minute — please try again in a moment.');
     }
     throw new Error('Network error. Please check your internet connection or try again in a moment.');
   } finally {
