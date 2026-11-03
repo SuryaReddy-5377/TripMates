@@ -106,7 +106,7 @@ const expenseInputSchema = z.object({
   })).optional(),
 
   // Optional manual family share breakdown
-  family_breakdowns: z.record(z.string(), z.array(z.object({ id: z.string(), amount: z.number().int().nonnegative() }))).optional(),
+  family_breakdowns: z.record(z.string(), z.array(z.object({ id: z.string(), amount: z.number().int().nonnegative().optional() }))).optional(),
 });
 
 const expensePreviewSchema = expenseInputSchema.extend({
@@ -205,12 +205,21 @@ function calculateSplitResult(input: z.infer<typeof expenseInputSchema>) {
     }
   }
 
+  if (input.split_method === 'family_wise' && input.accounting_mode === 'individual') {
+    input.accounting_mode = 'family';
+  }
+
   // If manual family breakdown was passed, use it
   if (input.family_breakdowns) {
     for (const [famKey, members] of Object.entries(input.family_breakdowns)) {
       const famAlloc = allocations.find(a => a.id === famKey);
-      if (famAlloc) {
-        familyBreakdowns[famKey] = splitFamilyShare(famAlloc.amount, members.map(m => m.id), members);
+      if (famAlloc && members.length > 0) {
+        const hasCustomAmounts = members.some(m => m.amount !== undefined && m.amount > 0);
+        if (hasCustomAmounts) {
+          familyBreakdowns[famKey] = splitFamilyShare(famAlloc.amount, members.map(m => m.id), members as Allocation[]);
+        } else {
+          familyBreakdowns[famKey] = splitFamilyShare(famAlloc.amount, members.map(m => m.id));
+        }
       }
     }
   }
@@ -465,6 +474,146 @@ expensesRouter.post('/', requireAuth, requireTripAccess('tripId'), async (req: R
     res.status(201).json(saved);
   } catch (err) {
     res.status(400).json({ error: 'FAILED_TO_SAVE_EXPENSE', message: (err as Error).message });
+  }
+});
+
+// PUT /api/trips/:tripId/expenses/:expenseId - Edit / update existing expense
+expensesRouter.put('/:expenseId', requireAuth, requireTripAccess('tripId'), async (req: Request, res: Response) => {
+  const tripId = req.trip!.id;
+  const expenseId = Number(req.params.expenseId);
+
+  const existingExpense = (await req.db.prepare(`
+    SELECT * FROM expenses WHERE id = ? AND trip_id = ?
+  `).get(expenseId, tripId)) as any;
+
+  if (!existingExpense) {
+    res.status(404).json({ error: 'NOT_FOUND', message: 'Expense not found' });
+    return;
+  }
+
+  if (existingExpense.voided_at) {
+    res.status(400).json({ error: 'ALREADY_VOIDED', message: 'Cannot edit a voided expense' });
+    return;
+  }
+
+  // Permission check: super_admin, trip creator, or expense creator
+  if (req.user!.role !== 'super_admin' && req.trip!.created_by !== req.user!.id && existingExpense.created_by !== req.user!.id) {
+    res.status(403).json({ error: 'FORBIDDEN', message: 'You do not have permission to edit this expense' });
+    return;
+  }
+
+  const parseResult = expenseInputSchema.safeParse(req.body);
+  if (!parseResult.success) {
+    res.status(400).json({ error: 'VALIDATION_ERROR', details: parseResult.error.format() });
+    return;
+  }
+
+  const input = parseResult.data;
+  if (input.split_method === 'family_wise' && input.accounting_mode === 'individual') {
+    input.accounting_mode = 'family';
+  }
+
+  try {
+    const calc = calculateSplitResult(input);
+
+    const updated = await withTransaction(req.db, async () => {
+      await req.db.prepare(`
+        UPDATE expenses SET
+          title = ?,
+          expense_date = ?,
+          category = ?,
+          total_paise = ?,
+          paid_by_type = ?,
+          paid_by_id = ?,
+          accounting_mode = ?,
+          split_method = ?,
+          notes = ?,
+          receipt_total_paise = ?
+        WHERE id = ?
+      `).run(
+        input.title,
+        input.expense_date,
+        input.category,
+        calc.totalPaise,
+        input.paid_by_type,
+        input.paid_by_id,
+        input.accounting_mode,
+        input.split_method,
+        input.notes || null,
+        calc.receiptTotalPaise ?? null,
+        expenseId
+      );
+
+      // Clean up previous allocations & breakdowns
+      await req.db.prepare('DELETE FROM expense_allocations WHERE expense_id = ?').run(expenseId);
+      await req.db.prepare('DELETE FROM family_share_breakdown WHERE expense_id = ?').run(expenseId);
+      await req.db.prepare('DELETE FROM expense_items WHERE expense_id = ?').run(expenseId);
+      await req.db.prepare('DELETE FROM expense_charges WHERE expense_id = ?').run(expenseId);
+
+      // Insert items if itemized
+      if (input.split_method === 'itemized' && input.items) {
+        for (const item of input.items) {
+          const subtotal = item.unitPrice * item.quantity;
+          await req.db.prepare(`
+            INSERT INTO expense_items (expense_id, name, unit_price_paise, quantity, subtotal_paise)
+            VALUES (?, ?, ?, ?, ?)
+          `).run(expenseId, item.name, item.unitPrice, item.quantity, subtotal);
+        }
+
+        if (input.charges) {
+          for (const charge of input.charges) {
+            const isNegative = charge.kind === 'discount' || (charge.kind === 'adjustment' && charge.direction === 'subtract');
+            const signedAmount = isNegative ? -charge.amount : charge.amount;
+            await req.db.prepare(`
+              INSERT INTO expense_charges (expense_id, kind, label, signed_amount_paise)
+              VALUES (?, ?, ?, ?)
+            `).run(expenseId, charge.kind, charge.label || null, signedAmount);
+          }
+        }
+      }
+
+      // Insert updated allocations
+      for (const alloc of calc.allocations) {
+        const { type, id } = keyToAccount(alloc.id);
+        await req.db.prepare(`
+          INSERT INTO expense_allocations (expense_id, account_type, account_id, amount_paise)
+          VALUES (?, ?, ?, ?)
+        `).run(expenseId, type, id, alloc.amount);
+      }
+
+      // Insert updated family share breakdowns if any
+      for (const [famKey, members] of Object.entries(calc.familyBreakdowns)) {
+        const famAcct = keyToAccount(famKey);
+        for (const m of members) {
+          const memAcct = keyToAccount(m.id);
+          await req.db.prepare(`
+            INSERT INTO family_share_breakdown (expense_id, family_id, person_id, amount_paise)
+            VALUES (?, ?, ?, ?)
+          `).run(expenseId, famAcct.id, memAcct.id, m.amount);
+        }
+      }
+
+      recordAuditLog(req.db, req.user!.id, 'EDIT_EXPENSE', 'expenses', expenseId, {
+        old_title: existingExpense.title,
+        old_total: existingExpense.total_paise,
+      }, {
+        new_title: input.title,
+        new_total: calc.totalPaise,
+        splitMethod: input.split_method,
+      });
+
+      return {
+        id: expenseId,
+        title: input.title,
+        totalPaise: calc.totalPaise,
+        summary: calc.summary,
+        warnings: calc.warnings,
+      };
+    });
+
+    res.json(updated);
+  } catch (err) {
+    res.status(400).json({ error: 'FAILED_TO_UPDATE_EXPENSE', message: (err as Error).message });
   }
 });
 

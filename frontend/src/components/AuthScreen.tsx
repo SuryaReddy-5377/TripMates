@@ -210,16 +210,16 @@ export const AuthScreen: React.FC<Props> = ({
         display: 'flex',
         flexDirection: 'column',
       }}>
-        {/* Full-bleed Beach Vacation Hero Image */}
+        {/* Full-bleed Nature Travel Hero Image */}
         <img
-          src="/images/hero-beach.jpg"
-          alt="Family Beach Holiday"
+          src="/images/nature_hero.jpg"
+          alt="TripMates Scenic Nature"
           onError={(e) => {
             const target = e.target as HTMLImageElement;
-            if (target.src.includes('hero-beach.jpg')) {
-              target.src = '/images/beach_vacation.jpg';
-            } else if (target.src.includes('beach_vacation.jpg')) {
-              target.src = '/images/hero_family_trip.jpg';
+            if (target.src.includes('nature_hero.jpg')) {
+              target.src = '/images/trip-kerala.jpg';
+            } else if (target.src.includes('trip-kerala.jpg')) {
+              target.src = '/images/mountain_resort.jpg';
             }
           }}
           style={{
@@ -228,15 +228,16 @@ export const AuthScreen: React.FC<Props> = ({
             width: '100%',
             height: '100%',
             objectFit: 'cover',
-            filter: 'brightness(0.72) contrast(1.08)',
+            objectPosition: 'center 35%',
+            filter: 'brightness(0.88) contrast(1.04)',
           }}
         />
 
-        {/* Cinematic Gradient Scrim */}
+        {/* Cinematic Ambient Nature Scrim */}
         <div style={{
           position: 'absolute',
           inset: 0,
-          background: 'linear-gradient(180deg, rgba(15, 23, 42, 0.45) 0%, rgba(15, 23, 42, 0.6) 45%, rgba(15, 23, 42, 0.95) 100%)',
+          background: 'linear-gradient(180deg, rgba(15, 23, 42, 0.28) 0%, rgba(15, 23, 42, 0.45) 45%, rgba(15, 23, 42, 0.92) 100%)',
         }} />
 
         {/* Top Floating Glass Navigation */}
@@ -484,14 +485,14 @@ export const AuthScreen: React.FC<Props> = ({
 
             {/* Feature Bullets */}
             <ul style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(3, auto)',
-              gap: '1.25rem',
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: '0.85rem 1.5rem',
               listStyle: 'none',
               padding: 0,
               margin: 0,
               fontSize: '0.9rem',
-              color: 'rgba(255, 255, 255, 0.88)',
+              color: 'rgba(255, 255, 255, 0.92)',
               fontWeight: 500,
             }}>
               <li style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>

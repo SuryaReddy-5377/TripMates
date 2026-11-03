@@ -70,6 +70,7 @@ export const TripDetail: React.FC<Props> = ({
   // Modal controls
   const [showItemizedEditor, setShowItemizedEditor] = useState(false);
   const [showSplitWizard, setShowSplitWizard] = useState(false);
+  const [editingExpense, setEditingExpense] = useState<any | null>(null);
   const [showRepaymentModal, setShowRepaymentModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [repaymentPrefill, setRepaymentPrefill] = useState<any>(null);
@@ -273,7 +274,7 @@ export const TripDetail: React.FC<Props> = ({
               <CheckCircle2 size={16} /> {t.markCompleted}
             </button>
           )}
-          <button type="button" onClick={() => setShowSplitWizard(true)} className="btn btn-primary btn-sm">
+          <button type="button" onClick={() => { setEditingExpense(null); setShowSplitWizard(true); }} className="btn btn-primary btn-sm">
             <Plus size={16} /> {t.addExpense}
           </button>
         </div>
@@ -396,7 +397,7 @@ export const TripDetail: React.FC<Props> = ({
                 {t.noExpensesDesc}
               </p>
               <div style={{ display: 'flex', justifyContent: 'center', gap: '0.75rem' }}>
-                <button type="button" onClick={() => setShowSplitWizard(true)} className="btn btn-primary">
+                <button type="button" onClick={() => { setEditingExpense(null); setShowSplitWizard(true); }} className="btn btn-primary">
                   <Plus size={16} /> {t.addExpense}
                 </button>
               </div>
@@ -460,14 +461,29 @@ export const TripDetail: React.FC<Props> = ({
                     </div>
 
                     {!exp.voided_at && (isCreatorOrAdmin || exp.created_by === currentUser.id) && (
-                      <button
-                        type="button"
-                        onClick={() => handleVoidExpense(exp.id)}
-                        className="btn btn-danger btn-sm"
-                        title="Void Expense"
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                      <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingExpense(exp);
+                            setShowSplitWizard(true);
+                          }}
+                          className="btn btn-secondary btn-sm"
+                          title="Edit Expense"
+                          style={{ padding: '0.35rem 0.6rem' }}
+                        >
+                          <Edit2 size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleVoidExpense(exp.id)}
+                          className="btn btn-danger btn-sm"
+                          title="Void Expense"
+                          style={{ padding: '0.35rem 0.6rem' }}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -1030,11 +1046,16 @@ export const TripDetail: React.FC<Props> = ({
               tripId={tripId}
               participants={trip.participants}
               families={trip.families}
+              expenseToEdit={editingExpense}
               onExpenseSaved={() => {
                 setShowSplitWizard(false);
+                setEditingExpense(null);
                 loadAllTripData();
               }}
-              onCancel={() => setShowSplitWizard(false)}
+              onCancel={() => {
+                setShowSplitWizard(false);
+                setEditingExpense(null);
+              }}
             />
           </div>
         </div>

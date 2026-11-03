@@ -1,28 +1,33 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useI18n } from '../i18n/context';
 import { Translations } from '../i18n/translations';
 import { api } from '../api/client';
 import {
   Users,
+  User,
   Check,
   AlertCircle,
   ShieldAlert,
-  Sparkles,
   X,
   CreditCard,
-  Calendar,
-  Layers,
   ChevronDown,
+  ChevronUp,
+  Scale,
+  Edit3,
+  Utensils,
+  CheckCircle2,
+  Sparkles,
 } from 'lucide-react';
 
-interface Participant {
+export interface Participant {
   id: number;
   display_name: string;
   family_id: number | null;
   family_name: string | null;
+  attendance?: string;
 }
 
-interface Family {
+export interface Family {
   id: number;
   name: string;
 }
@@ -31,6 +36,7 @@ interface Props {
   tripId: number;
   participants: Participant[];
   families: Family[];
+  expenseToEdit?: any | null;
   onExpenseSaved: () => void;
   onCancel: () => void;
 }
@@ -48,47 +54,87 @@ export const ExpenseSplitWizard: React.FC<Props> = ({
   tripId,
   participants,
   families,
+  expenseToEdit,
   onExpenseSaved,
   onCancel,
 }) => {
   const { t, formatINR } = useI18n();
 
-  const [title, setTitle] = useState('');
-  const [expenseDate, setExpenseDate] = useState(() => new Date().toISOString().split('T')[0]);
-  const [category, setCategory] = useState('Food');
-  // Starts EMPTY / 0 - users must deliberately enter the expense amount
-  const [totalRupees, setTotalRupees] = useState('');
-  const [payerType, setPayerType] = useState<'person' | 'family'>('person');
-  const [payerId, setPayerId] = useState<number>(participants[0]?.id || 1);
+  const isEditing = Boolean(expenseToEdit && expenseToEdit.id);
 
-  // Split Method: defaults to equal split
-  const [splitMethod, setSplitMethod] = useState<'equal' | 'individual_remainder' | 'custom' | 'per_head' | 'percentage' | 'family_wise'>('equal');
-  const [showMoreOptions, setShowMoreOptions] = useState(false);
+  // Form State
+  const [title, setTitle] = useState(expenseToEdit?.title || '');
+  const [expenseDate, setExpenseDate] = useState(() => expenseToEdit?.expense_date || new Date().toISOString().split('T')[0]);
+  const [category, setCategory] = useState(expenseToEdit?.category || 'Food');
+  const [totalRupees, setTotalRupees] = useState(() => {
+    if (expenseToEdit?.total_paise) {
+      return (expenseToEdit.total_paise / 100).toString();
+    }
+    return '';
+  });
+  const [payerType, setPayerType] = useState<'person' | 'family'>(expenseToEdit?.paid_by_type || 'person');
+  const [payerId, setPayerId] = useState<number>(expenseToEdit?.paid_by_id || participants[0]?.id || 1);
 
-  // Selected participant keys (e.g. ['p:1', 'p:2'])
-  const [selectedKeys, setSelectedKeys] = useState<string[]>(() => participants.map(p => `p:${p.id}`));
+  // ONLY TWO MAIN SPLITTING OPTIONS: 'equal' | 'custom'
+  const [mainOption, setMainOption] = useState<'equal' | 'custom'>(() => {
+    if (expenseToEdit?.split_method === 'custom' || expenseToEdit?.split_method === 'individual_remainder') {
+      return 'custom';
+    }
+    return 'equal';
+  });
 
-  // For individual amount + equal shared remainder: record of accountKey -> rupee string
-  const [individualAmounts, setIndividualAmounts] = useState<Record<string, string>>({});
+  // SUB-OPTIONS: 'per_head' | 'family_wise'
+  const [subOption, setSubOption] = useState<'per_head' | 'family_wise'>(() => {
+    if (expenseToEdit?.split_method === 'family_wise' || expenseToEdit?.accounting_mode === 'family') {
+      return 'family_wise';
+    }
+    return 'per_head';
+  });
 
-  // For custom amounts: record of accountKey -> rupee string
-  const [customAmounts, setCustomAmounts] = useState<Record<string, string>>({});
+  // PARTICIPANT SELECTION FOR PER-HEAD (e.g. ['p:1', 'p:2'])
+  const [selectedPersonKeys, setSelectedPersonKeys] = useState<string[]>(() => {
+    return participants.map(p => `p:${p.id}`);
+  });
 
-  // For percentages: record of accountKey -> percentage number string
-  const [percentages, setPercentages] = useState<Record<string, string>>({});
+  // FAMILY SELECTION FOR FAMILY-WISE (e.g. ['f:1', 'f:2'])
+  const [selectedFamilyKeys, setSelectedFamilyKeys] = useState<string[]>(() => {
+    return families.map(f => `f:${f.id}`);
+  });
 
-  // For per-head: rate string + record of accountKey -> heads number
-  const [perHeadRateStr, setPerHeadRateStr] = useState('150');
-  const [perHeadCounts, setPerHeadCounts] = useState<Record<string, number>>(() => {
-    const initial: Record<string, number> = {};
-    participants.forEach(p => { initial[`p:${p.id}`] = 1; });
+  // FAMILY MEMBER SELECTION (familyKey -> array of person keys included, e.g. 'f:1' -> ['p:2', 'p:3'])
+  const [familyMemberInclusions, setFamilyMemberInclusions] = useState<Record<string, string[]>>(() => {
+    const map: Record<string, string[]> = {};
+    families.forEach(f => {
+      map[`f:${f.id}`] = participants.filter(p => p.family_id === f.id).map(p => `p:${p.id}`);
+    });
+    return map;
+  });
+
+  // CUSTOM AMOUNTS: person amounts in ₹ (e.g. 'p:1' -> '1500')
+  const [customPersonAmounts, setCustomPersonAmounts] = useState<Record<string, string>>({});
+
+  // CUSTOM AMOUNTS: family amounts in ₹ (e.g. 'f:1' -> '3000')
+  const [customFamilyAmounts, setCustomFamilyAmounts] = useState<Record<string, string>>({});
+
+  // CUSTOM AMOUNTS: internal family member breakdown amounts in ₹ (familyKey -> (personKey -> amountStr))
+  const [familyMemberCustomAmounts, setFamilyMemberCustomAmounts] = useState<Record<string, Record<string, string>>>({});
+
+  // Optional supported remainder rule in Custom Amount -> Per Head
+  const [splitRemainderEqually, setSplitRemainderEqually] = useState(false);
+
+  // Collapsible state for families in Family-Wise mode
+  const [expandedFamilies, setExpandedFamilies] = useState<Record<string, boolean>>(() => {
+    const initial: Record<string, boolean> = {};
+    families.forEach(f => { initial[`f:${f.id}`] = true; });
     return initial;
   });
 
   const [preview, setPreview] = useState<any>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoadingDetails, setIsLoadingDetails] = useState(false);
 
+  // Helper to parse rupee string into integer paise safely
   const toPaise = (rupeeStr: string): number => {
     const clean = (rupeeStr || '').trim().replace(/,/g, '');
     const num = parseFloat(clean);
@@ -96,188 +142,515 @@ export const ExpenseSplitWizard: React.FC<Props> = ({
   };
 
   const totalPaise = toPaise(totalRupees);
-  const individualTotalPaise = selectedKeys.reduce((sum, k) => sum + toPaise(individualAmounts[k] || '0'), 0);
-  const sharedRemainderPaise = totalPaise - individualTotalPaise;
-  const isIndividualTotalOver = splitMethod === 'individual_remainder' && individualTotalPaise > totalPaise;
-  const equalRemainderPerPersonPaise = (splitMethod === 'individual_remainder' && selectedKeys.length > 0)
-    ? Math.floor(Math.max(0, sharedRemainderPaise) / selectedKeys.length)
-    : 0;
-  const equalSharePaise = selectedKeys.length > 0 ? Math.floor(totalPaise / selectedKeys.length) : 0;
 
-  // Live preview effect
+  // Load existing expense allocations if editing
+  useEffect(() => {
+    if (!expenseToEdit?.id) return;
+
+    const loadExisting = async () => {
+      try {
+        setIsLoadingDetails(true);
+        const data = await api.get(`/trips/${tripId}/expenses/${expenseToEdit.id}`);
+        if (!data) return;
+
+        setTitle(data.title || '');
+        setExpenseDate(data.expense_date || '');
+        setCategory(data.category || 'Food');
+        setTotalRupees((data.total_paise / 100).toString());
+        setPayerType(data.paid_by_type || 'person');
+        setPayerId(data.paid_by_id || 1);
+
+        if (data.split_method === 'family_wise' || data.accounting_mode === 'family') {
+          setSubOption('family_wise');
+          const famKeys = (data.allocations || [])
+            .filter((a: any) => a.account_type === 'family')
+            .map((a: any) => `f:${a.account_id}`);
+          if (famKeys.length > 0) {
+            setSelectedFamilyKeys(famKeys);
+          }
+
+          if (data.split_method === 'custom' || (data.allocations || []).some((a: any) => a.account_type === 'family' && data.split_method === 'family_wise')) {
+            const famAmts: Record<string, string> = {};
+            (data.allocations || []).forEach((a: any) => {
+              if (a.account_type === 'family') {
+                famAmts[`f:${a.account_id}`] = (a.amount_paise / 100).toString();
+              }
+            });
+            setCustomFamilyAmounts(famAmts);
+          }
+
+          if (data.family_breakdowns && data.family_breakdowns.length > 0) {
+            const inclusions: Record<string, string[]> = {};
+            const memAmts: Record<string, Record<string, string>> = {};
+            data.family_breakdowns.forEach((fb: any) => {
+              const fKey = `f:${fb.family_id}`;
+              const pKey = `p:${fb.person_id}`;
+              inclusions[fKey] = inclusions[fKey] || [];
+              if (!inclusions[fKey].includes(pKey)) inclusions[fKey].push(pKey);
+              memAmts[fKey] = memAmts[fKey] || {};
+              memAmts[fKey][pKey] = (fb.amount_paise / 100).toString();
+            });
+            setFamilyMemberInclusions(prev => ({ ...prev, ...inclusions }));
+            setFamilyMemberCustomAmounts(memAmts);
+          }
+        } else {
+          setSubOption('per_head');
+          const pKeys = (data.allocations || [])
+            .filter((a: any) => a.account_type === 'person')
+            .map((a: any) => `p:${a.account_id}`);
+          if (pKeys.length > 0) {
+            setSelectedPersonKeys(pKeys);
+          }
+
+          if (data.split_method === 'custom') {
+            setMainOption('custom');
+            const pAmts: Record<string, string> = {};
+            (data.allocations || []).forEach((a: any) => {
+              if (a.account_type === 'person') {
+                pAmts[`p:${a.account_id}`] = (a.amount_paise / 100).toString();
+              }
+            });
+            setCustomPersonAmounts(pAmts);
+          } else if (data.split_method === 'individual_remainder') {
+            setMainOption('custom');
+            setSplitRemainderEqually(true);
+            const pAmts: Record<string, string> = {};
+            (data.allocations || []).forEach((a: any) => {
+              if (a.account_type === 'person') {
+                pAmts[`p:${a.account_id}`] = (a.amount_paise / 100).toString();
+              }
+            });
+            setCustomPersonAmounts(pAmts);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load expense details for editing', err);
+      } finally {
+        setIsLoadingDetails(false);
+      }
+    };
+
+    loadExisting();
+  }, [expenseToEdit?.id, tripId]);
+
+  // Calculations for Per-Head Custom
+  const personAllocatedPaise = useMemo(() => {
+    return selectedPersonKeys.reduce((sum, key) => sum + toPaise(customPersonAmounts[key] || '0'), 0);
+  }, [selectedPersonKeys, customPersonAmounts]);
+
+  const personRemainingPaise = totalPaise - personAllocatedPaise;
+  const isPersonOver = personAllocatedPaise > totalPaise;
+  const isPersonMatched = personAllocatedPaise === totalPaise && totalPaise > 0;
+
+  // Remainder per person if remainder rule is active
+  const equalRemainderPerPersonPaise = (mainOption === 'custom' && subOption === 'per_head' && splitRemainderEqually && selectedPersonKeys.length > 0)
+    ? Math.floor(Math.max(0, personRemainingPaise) / selectedPersonKeys.length)
+    : 0;
+
+  // Calculations for Family-Wise Custom
+  const familyAllocatedPaise = useMemo(() => {
+    return selectedFamilyKeys.reduce((sum, key) => sum + toPaise(customFamilyAmounts[key] || '0'), 0);
+  }, [selectedFamilyKeys, customFamilyAmounts]);
+
+  const familyRemainingPaise = totalPaise - familyAllocatedPaise;
+  const isFamilyOver = familyAllocatedPaise > totalPaise;
+  const isFamilyMatched = familyAllocatedPaise === totalPaise && totalPaise > 0;
+
+  // Real-time Preview computation and API sync
   useEffect(() => {
     const runPreview = async () => {
       try {
         setErrorMsg(null);
-
         if (totalPaise <= 0) {
           setPreview(null);
           return;
         }
 
-        if (selectedKeys.length === 0) {
-          setPreview(null);
-          return;
-        }
-
-        if (splitMethod === 'individual_remainder' && isIndividualTotalOver) {
-          setPreview(null);
-          return;
-        }
-
-        const hasFamilies = selectedKeys.some(k => k.startsWith('f:'));
-        const hasPersons = selectedKeys.some(k => k.startsWith('p:'));
-        const accountingMode = splitMethod === 'family_wise'
-          ? 'family'
-          : (hasFamilies && hasPersons)
-            ? 'mixed'
-            : hasFamilies
-              ? 'family'
-              : 'individual';
-
         const safePayerId = Number(payerId) > 0 ? Number(payerId) : (participants[0]?.id || 1);
         const safePayerType = payerType || 'person';
 
-        const payload: any = {
-          title: title.trim() || 'Expense',
-          expense_date: expenseDate || new Date().toISOString().split('T')[0],
-          category: category || 'general',
-          paid_by_type: safePayerType,
-          paid_by_id: safePayerId,
-          accounting_mode: accountingMode,
-          split_method: splitMethod,
-          total_paise: totalPaise,
-        };
-
-        if (splitMethod === 'individual_remainder') {
-          payload.individual_entries = selectedKeys.map(k => ({
-            id: k,
-            individual_amount_paise: toPaise(individualAmounts[k] || '0'),
-          }));
-        } else if (splitMethod === 'equal') {
-          payload.participant_keys = selectedKeys;
-        } else if (splitMethod === 'per_head') {
-          payload.per_head_rate_paise = toPaise(perHeadRateStr);
-          payload.per_head_entries = Object.entries(perHeadCounts)
-            .filter(([k]) => selectedKeys.includes(k))
-            .map(([id, heads]) => ({ id, heads }));
-        } else if (splitMethod === 'custom') {
-          payload.custom_entries = selectedKeys.map(k => ({
-            id: k,
-            amount_paise: toPaise(customAmounts[k] || '0'),
-          }));
-        } else if (splitMethod === 'percentage') {
-          payload.percentage_entries = selectedKeys.map(k => ({
-            id: k,
-            bps: Math.round(parseFloat(percentages[k] || '0') * 100),
-          }));
-        } else if (splitMethod === 'family_wise') {
-          payload.participant_keys = families.map(f => `f:${f.id}`);
+        // 1. Equal Split -> Per Head
+        if (mainOption === 'equal' && subOption === 'per_head') {
+          if (selectedPersonKeys.length === 0) {
+            setPreview(null);
+            return;
+          }
+          const payload = {
+            title: title.trim() || 'Expense',
+            expense_date: expenseDate,
+            category,
+            total_paise: totalPaise,
+            paid_by_type: safePayerType,
+            paid_by_id: safePayerId,
+            accounting_mode: 'individual',
+            split_method: 'equal',
+            participant_keys: selectedPersonKeys,
+          };
+          const res = await api.post(`/trips/${tripId}/expenses/preview`, payload);
+          setPreview(res);
+          return;
         }
 
-        const res = await api.post(`/trips/${tripId}/expenses/preview`, payload);
-        setPreview(res);
-      } catch (err: any) {
+        // 2. Equal Split -> Family-Wise
+        if (mainOption === 'equal' && subOption === 'family_wise') {
+          if (selectedFamilyKeys.length === 0) {
+            setPreview(null);
+            return;
+          }
+
+          // Build family breakdown where family amount is divided among participating members
+          const familyBreakdownsPayload: Record<string, Array<{ id: string; amount?: number }>> = {};
+          selectedFamilyKeys.forEach(fKey => {
+            const includedMembers = familyMemberInclusions[fKey] || [];
+            if (includedMembers.length > 0) {
+              familyBreakdownsPayload[fKey] = includedMembers.map(mKey => ({ id: mKey }));
+            }
+          });
+
+          const payload = {
+            title: title.trim() || 'Expense',
+            expense_date: expenseDate,
+            category,
+            total_paise: totalPaise,
+            paid_by_type: safePayerType,
+            paid_by_id: safePayerId,
+            accounting_mode: 'family',
+            split_method: 'family_wise',
+            participant_keys: selectedFamilyKeys,
+            family_breakdowns: familyBreakdownsPayload,
+          };
+          const res = await api.post(`/trips/${tripId}/expenses/preview`, payload);
+          setPreview(res);
+          return;
+        }
+
+        // 3. Custom Amount -> Per Head
+        if (mainOption === 'custom' && subOption === 'per_head') {
+          if (selectedPersonKeys.length === 0) {
+            setPreview(null);
+            return;
+          }
+
+          if (splitRemainderEqually) {
+            if (isPersonOver) {
+              setPreview(null);
+              return;
+            }
+            const payload = {
+              title: title.trim() || 'Expense',
+              expense_date: expenseDate,
+              category,
+              total_paise: totalPaise,
+              paid_by_type: safePayerType,
+              paid_by_id: safePayerId,
+              accounting_mode: 'individual',
+              split_method: 'individual_remainder',
+              individual_entries: selectedPersonKeys.map(k => ({
+                id: k,
+                individual_amount_paise: toPaise(customPersonAmounts[k] || '0'),
+              })),
+            };
+            const res = await api.post(`/trips/${tripId}/expenses/preview`, payload);
+            setPreview(res);
+          } else {
+            // Strict custom split
+            if (!isPersonMatched) {
+              setPreview(null);
+              return;
+            }
+            const payload = {
+              title: title.trim() || 'Expense',
+              expense_date: expenseDate,
+              category,
+              total_paise: totalPaise,
+              paid_by_type: safePayerType,
+              paid_by_id: safePayerId,
+              accounting_mode: 'individual',
+              split_method: 'custom',
+              custom_entries: selectedPersonKeys.map(k => ({
+                id: k,
+                amount_paise: toPaise(customPersonAmounts[k] || '0'),
+              })),
+            };
+            const res = await api.post(`/trips/${tripId}/expenses/preview`, payload);
+            setPreview(res);
+          }
+          return;
+        }
+
+        // 4. Custom Amount -> Family-Wise
+        if (mainOption === 'custom' && subOption === 'family_wise') {
+          if (selectedFamilyKeys.length === 0 || !isFamilyMatched) {
+            setPreview(null);
+            return;
+          }
+
+          const familyBreakdownsPayload: Record<string, Array<{ id: string; amount?: number }>> = {};
+          selectedFamilyKeys.forEach(fKey => {
+            const includedMembers = familyMemberInclusions[fKey] || [];
+            if (includedMembers.length > 0) {
+              const memCustom = familyMemberCustomAmounts[fKey];
+              const hasCustom = memCustom && Object.values(memCustom).some(v => toPaise(v) > 0);
+              if (hasCustom) {
+                familyBreakdownsPayload[fKey] = includedMembers.map(mKey => ({
+                  id: mKey,
+                  amount: toPaise(memCustom[mKey] || '0'),
+                }));
+              } else {
+                familyBreakdownsPayload[fKey] = includedMembers.map(mKey => ({ id: mKey }));
+              }
+            }
+          });
+
+          const payload = {
+            title: title.trim() || 'Expense',
+            expense_date: expenseDate,
+            category,
+            total_paise: totalPaise,
+            paid_by_type: safePayerType,
+            paid_by_id: safePayerId,
+            accounting_mode: 'family',
+            split_method: 'family_wise',
+            custom_entries: selectedFamilyKeys.map(k => ({
+              id: k,
+              amount_paise: toPaise(customFamilyAmounts[k] || '0'),
+            })),
+            family_breakdowns: familyBreakdownsPayload,
+          };
+          const res = await api.post(`/trips/${tripId}/expenses/preview`, payload);
+          setPreview(res);
+          return;
+        }
+      } catch (err) {
         setPreview(null);
       }
     };
 
-    const timer = setTimeout(runPreview, 200);
+    const timer = setTimeout(runPreview, 250);
     return () => clearTimeout(timer);
-  }, [totalPaise, splitMethod, selectedKeys, individualAmounts, customAmounts, percentages, perHeadRateStr, perHeadCounts, isIndividualTotalOver, tripId, families]);
+  }, [
+    totalPaise,
+    mainOption,
+    subOption,
+    selectedPersonKeys,
+    selectedFamilyKeys,
+    familyMemberInclusions,
+    customPersonAmounts,
+    customFamilyAmounts,
+    familyMemberCustomAmounts,
+    splitRemainderEqually,
+    isPersonMatched,
+    isPersonOver,
+    isFamilyMatched,
+    tripId,
+    title,
+    expenseDate,
+    category,
+    payerId,
+    payerType,
+    participants,
+  ]);
 
-  const toggleKey = (key: string) => {
-    setSelectedKeys(prev =>
+  // Toggle individual person
+  const togglePerson = (key: string) => {
+    setSelectedPersonKeys(prev =>
       prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
     );
   };
 
-  const selectAll = () => {
-    setSelectedKeys(participants.map(p => `p:${p.id}`));
+  // Toggle family inclusion
+  const toggleFamily = (key: string) => {
+    setSelectedFamilyKeys(prev =>
+      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
+    );
   };
 
-  const selectNone = () => {
-    setSelectedKeys([]);
+  // Toggle member inside a family
+  const toggleFamilyMember = (fKey: string, pKey: string) => {
+    setFamilyMemberInclusions(prev => {
+      const current = prev[fKey] || [];
+      const updated = current.includes(pKey)
+        ? current.filter(k => k !== pKey)
+        : [...current, pKey];
+      return { ...prev, [fKey]: updated };
+    });
   };
 
+  // Select all / none helpers
+  const selectAllPersons = () => {
+    setSelectedPersonKeys(participants.map(p => `p:${p.id}`));
+  };
+
+  const selectNonePersons = () => {
+    setSelectedPersonKeys([]);
+  };
+
+  const selectAllFamilies = () => {
+    setSelectedFamilyKeys(families.map(f => `f:${f.id}`));
+  };
+
+  const selectNoneFamilies = () => {
+    setSelectedFamilyKeys([]);
+  };
+
+  // Quick action: auto-fill remaining balance into the active person custom amounts
+  const autoFillRemainingPerHead = () => {
+    if (personRemainingPaise <= 0 || selectedPersonKeys.length === 0) return;
+    const shareEach = Math.floor(personRemainingPaise / selectedPersonKeys.length);
+    const updated: Record<string, string> = { ...customPersonAmounts };
+    let remainderAcc = personRemainingPaise;
+    selectedPersonKeys.forEach((key, idx) => {
+      const currentVal = toPaise(updated[key] || '0');
+      const addVal = idx === selectedPersonKeys.length - 1 ? remainderAcc : shareEach;
+      remainderAcc -= addVal;
+      updated[key] = ((currentVal + addVal) / 100).toFixed(2);
+    });
+    setCustomPersonAmounts(updated);
+  };
+
+  // Form Submission
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!title.trim()) {
-      setErrorMsg('Please enter an expense title / description');
+      setErrorMsg(t.enterValidTitle || 'Please enter an expense title / description');
       return;
     }
 
     if (totalPaise <= 0) {
-      setErrorMsg('Please enter an expense amount greater than ₹0');
+      setErrorMsg(t.expenseAmountMustBePositive || 'Please enter an expense amount greater than ₹0');
       return;
     }
 
-    if (selectedKeys.length === 0) {
-      setErrorMsg('Please select at least one participant');
+    if (subOption === 'per_head' && selectedPersonKeys.length === 0) {
+      setErrorMsg(t.selectAtLeastOneParticipant || 'Please select at least one participating member');
       return;
     }
 
-    if (splitMethod === 'individual_remainder' && isIndividualTotalOver) {
-      setErrorMsg(`Individual amounts sum (${formatINR(individualTotalPaise)}) exceeds total bill (${formatINR(totalPaise)})`);
+    if (subOption === 'family_wise' && selectedFamilyKeys.length === 0) {
+      setErrorMsg('Please select at least one participating family');
       return;
+    }
+
+    if (mainOption === 'custom' && subOption === 'per_head') {
+      if (splitRemainderEqually) {
+        if (isPersonOver) {
+          setErrorMsg(`Individual entries sum (${formatINR(personAllocatedPaise)}) exceeds bill (${formatINR(totalPaise)})`);
+          return;
+        }
+      } else {
+        if (!isPersonMatched) {
+          const diff = personAllocatedPaise - totalPaise;
+          setErrorMsg(
+            diff > 0
+              ? `Allocations exceed bill total by ${formatINR(Math.abs(diff))}. Total must equal ${formatINR(totalPaise)}.`
+              : `Allocations are short by ${formatINR(Math.abs(diff))}. Total must equal ${formatINR(totalPaise)}.`
+          );
+          return;
+        }
+      }
+    }
+
+    if (mainOption === 'custom' && subOption === 'family_wise') {
+      if (!isFamilyMatched) {
+        const diff = familyAllocatedPaise - totalPaise;
+        setErrorMsg(
+          diff > 0
+            ? `Family allocations exceed bill total by ${formatINR(Math.abs(diff))}. Total must equal ${formatINR(totalPaise)}.`
+            : `Family allocations are short by ${formatINR(Math.abs(diff))}. Total must equal ${formatINR(totalPaise)}.`
+        );
+        return;
+      }
     }
 
     try {
       setIsSubmitting(true);
       setErrorMsg(null);
 
-      const hasFamilies = selectedKeys.some(k => k.startsWith('f:'));
-      const hasPersons = selectedKeys.some(k => k.startsWith('p:'));
-      const accountingMode = splitMethod === 'family_wise'
-        ? 'family'
-        : (hasFamilies && hasPersons)
-          ? 'mixed'
-          : hasFamilies
-            ? 'family'
-            : 'individual';
-
       const safePayerId = Number(payerId) > 0 ? Number(payerId) : (participants[0]?.id || 1);
       const safePayerType = payerType || 'person';
 
-      const payload: any = {
+      let payload: any = {
         title: title.trim(),
         expense_date: expenseDate,
         category,
         total_paise: totalPaise,
         paid_by_type: safePayerType,
         paid_by_id: safePayerId,
-        accounting_mode: accountingMode,
-        split_method: splitMethod,
       };
 
-      if (splitMethod === 'individual_remainder') {
-        payload.individual_entries = selectedKeys.map(k => ({
+      // 1. Equal Split -> Per Head
+      if (mainOption === 'equal' && subOption === 'per_head') {
+        payload.accounting_mode = 'individual';
+        payload.split_method = 'equal';
+        payload.participant_keys = selectedPersonKeys;
+      }
+      // 2. Equal Split -> Family-Wise
+      else if (mainOption === 'equal' && subOption === 'family_wise') {
+        payload.accounting_mode = 'family';
+        payload.split_method = 'family_wise';
+        payload.participant_keys = selectedFamilyKeys;
+
+        const familyBreakdownsPayload: Record<string, Array<{ id: string; amount?: number }>> = {};
+        selectedFamilyKeys.forEach(fKey => {
+          const includedMembers = familyMemberInclusions[fKey] || [];
+          if (includedMembers.length > 0) {
+            familyBreakdownsPayload[fKey] = includedMembers.map(mKey => ({ id: mKey }));
+          }
+        });
+        payload.family_breakdowns = familyBreakdownsPayload;
+      }
+      // 3. Custom Amount -> Per Head
+      else if (mainOption === 'custom' && subOption === 'per_head') {
+        payload.accounting_mode = 'individual';
+        if (splitRemainderEqually) {
+          payload.split_method = 'individual_remainder';
+          payload.individual_entries = selectedPersonKeys.map(k => ({
+            id: k,
+            individual_amount_paise: toPaise(customPersonAmounts[k] || '0'),
+          }));
+        } else {
+          payload.split_method = 'custom';
+          payload.custom_entries = selectedPersonKeys.map(k => ({
+            id: k,
+            amount_paise: toPaise(customPersonAmounts[k] || '0'),
+          }));
+        }
+      }
+      // 4. Custom Amount -> Family-Wise
+      else if (mainOption === 'custom' && subOption === 'family_wise') {
+        payload.accounting_mode = 'family';
+        payload.split_method = 'family_wise';
+        payload.custom_entries = selectedFamilyKeys.map(k => ({
           id: k,
-          individual_amount_paise: toPaise(individualAmounts[k] || '0'),
+          amount_paise: toPaise(customFamilyAmounts[k] || '0'),
         }));
-      } else if (splitMethod === 'equal') {
-        payload.participant_keys = selectedKeys;
-      } else if (splitMethod === 'per_head') {
-        payload.per_head_rate_paise = toPaise(perHeadRateStr);
-        payload.per_head_entries = Object.entries(perHeadCounts)
-          .filter(([k]) => selectedKeys.includes(k))
-          .map(([id, heads]) => ({ id, heads }));
-      } else if (splitMethod === 'custom') {
-        payload.custom_entries = selectedKeys.map(k => ({
-          id: k,
-          amount_paise: toPaise(customAmounts[k] || '0'),
-        }));
-      } else if (splitMethod === 'percentage') {
-        payload.percentage_entries = selectedKeys.map(k => ({
-          id: k,
-          bps: Math.round(parseFloat(percentages[k] || '0') * 100),
-        }));
-      } else if (splitMethod === 'family_wise') {
-        payload.participant_keys = families.map(f => `f:${f.id}`);
+
+        const familyBreakdownsPayload: Record<string, Array<{ id: string; amount?: number }>> = {};
+        selectedFamilyKeys.forEach(fKey => {
+          const includedMembers = familyMemberInclusions[fKey] || [];
+          if (includedMembers.length > 0) {
+            const memCustom = familyMemberCustomAmounts[fKey];
+            const hasCustom = memCustom && Object.values(memCustom).some(v => toPaise(v) > 0);
+            if (hasCustom) {
+              familyBreakdownsPayload[fKey] = includedMembers.map(mKey => ({
+                id: mKey,
+                amount: toPaise(memCustom[mKey] || '0'),
+              }));
+            } else {
+              familyBreakdownsPayload[fKey] = includedMembers.map(mKey => ({ id: mKey }));
+            }
+          }
+        });
+        payload.family_breakdowns = familyBreakdownsPayload;
       }
 
-      await api.post(`/trips/${tripId}/expenses`, payload);
+      if (isEditing) {
+        await api.put(`/trips/${tripId}/expenses/${expenseToEdit.id}`, payload);
+      } else {
+        await api.post(`/trips/${tripId}/expenses`, payload);
+      }
+
       onExpenseSaved();
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to save expense');
@@ -286,12 +659,20 @@ export const ExpenseSplitWizard: React.FC<Props> = ({
     }
   };
 
+  if (isLoadingDetails) {
+    return (
+      <div className="card-white" style={{ borderRadius: '20px', padding: '3rem', textAlign: 'center', background: '#fff' }}>
+        <p style={{ color: '#64748b', fontSize: '0.95rem' }}>{t.loading || 'Loading expense details...'}</p>
+      </div>
+    );
+  }
+
   return (
     <div
       className="card-white"
       style={{
         borderRadius: '20px',
-        maxWidth: '680px',
+        maxWidth: '740px',
         width: '100%',
         margin: '0 auto',
         padding: '2rem',
@@ -304,19 +685,20 @@ export const ExpenseSplitWizard: React.FC<Props> = ({
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', color: '#64748b', fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-            <CreditCard size={15} /> {t.expenseEngine}
+            <CreditCard size={15} /> {isEditing ? t.editExpense : t.expenseEngine}
           </div>
           <h2 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#0f172a', margin: '0.2rem 0 0 0', fontFamily: 'var(--font-display)' }}>
-            {t.addExpense}
+            {isEditing ? t.editExpense : t.addExpense}
           </h2>
           <p style={{ margin: '0.15rem 0 0 0', fontSize: '0.82rem', color: '#64748b' }}>
-            {t.expenseEngineSubtitle}
+            {isEditing ? t.editExpenseSubtitle : t.expenseEngineSubtitle}
           </p>
         </div>
         <button
           type="button"
           onClick={onCancel}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '0.25rem' }}
+          title={t.close || 'Close'}
         >
           <X size={22} />
         </button>
@@ -326,7 +708,7 @@ export const ExpenseSplitWizard: React.FC<Props> = ({
         <div style={{
           background: '#fef2f2',
           border: '1px solid #fecaca',
-          borderRadius: '10px',
+          borderRadius: '12px',
           padding: '0.75rem 1rem',
           color: '#dc2626',
           fontSize: '0.85rem',
@@ -340,11 +722,11 @@ export const ExpenseSplitWizard: React.FC<Props> = ({
         </div>
       )}
 
-      <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+      <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '1.35rem' }}>
         {/* HERO AMOUNT INPUT */}
         <div style={{
           background: '#f8fafc',
-          border: '1px solid #e2e8f0',
+          border: '1.5px solid #e2e8f0',
           borderRadius: '16px',
           padding: '1.25rem',
           textAlign: 'center',
@@ -373,7 +755,7 @@ export const ExpenseSplitWizard: React.FC<Props> = ({
                 fontFamily: 'var(--font-display)',
               }}
               required
-              autoFocus
+              autoFocus={!isEditing}
             />
           </div>
         </div>
@@ -474,278 +856,849 @@ export const ExpenseSplitWizard: React.FC<Props> = ({
           </div>
         </div>
 
-        {/* SPLIT METHOD TABS */}
+        {/* ONLY TWO MAIN SPLITTING OPTIONS */}
         <div>
-          <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#0f172a', marginBottom: '0.4rem' }}>
+          <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 800, color: '#0f172a', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
             {t.splitMethod}
           </label>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
-            {[
-              { id: 'equal', label: t.equalSplit },
-              { id: 'individual_remainder', label: t.individualRemainderSplit },
-              { id: 'custom', label: t.customSplit },
-            ].map(m => (
-              <button
-                key={m.id}
-                type="button"
-                onClick={() => setSplitMethod(m.id as any)}
-                style={{
-                  padding: '0.45rem 0.85rem',
-                  borderRadius: '8px',
-                  fontSize: '0.82rem',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  border: splitMethod === m.id ? '1.5px solid #0f172a' : '1px solid #e2e8f0',
-                  background: splitMethod === m.id ? '#0f172a' : '#f8fafc',
-                  color: splitMethod === m.id ? '#ffffff' : '#64748b',
-                  transition: 'all 0.15s ease',
-                }}
-              >
-                {m.label}
-              </button>
-            ))}
-
-            <button
-              type="button"
-              onClick={() => setShowMoreOptions(!showMoreOptions)}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '0.75rem' }}>
+            {/* OPTION 1: EQUAL SPLIT */}
+            <div
+              onClick={() => setMainOption('equal')}
               style={{
-                padding: '0.45rem 0.85rem',
-                borderRadius: '8px',
-                fontSize: '0.82rem',
-                fontWeight: 600,
+                padding: '1rem',
+                borderRadius: '14px',
+                border: mainOption === 'equal' ? '2px solid #0f172a' : '1px solid #e2e8f0',
+                background: mainOption === 'equal' ? '#f8fafc' : '#ffffff',
                 cursor: 'pointer',
-                border: '1px solid #e2e8f0',
-                background: ['percentage', 'per_head', 'family_wise'].includes(splitMethod) ? '#0f172a' : '#f8fafc',
-                color: ['percentage', 'per_head', 'family_wise'].includes(splitMethod) ? '#ffffff' : '#64748b',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.25rem',
+                transition: 'all 0.15s ease',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '0.75rem',
+                boxShadow: mainOption === 'equal' ? '0 4px 12px rgba(15,23,42,0.08)' : 'none',
               }}
             >
-              <span>{t.moreOptions}</span>
-              <ChevronDown size={14} />
-            </button>
-          </div>
-
-          {showMoreOptions && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginTop: '0.5rem', padding: '0.65rem', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-              {[
-                { id: 'percentage', label: t.percentageSplit },
-                { id: 'per_head', label: t.perHeadSplit },
-                { id: 'family_wise', label: t.familyWiseSplit },
-              ].map(m => (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => {
-                    setSplitMethod(m.id as any);
-                    setShowMoreOptions(false);
-                  }}
-                  style={{
-                    padding: '0.35rem 0.75rem',
-                    borderRadius: '6px',
-                    fontSize: '0.78rem',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    border: splitMethod === m.id ? '1.5px solid #0f172a' : '1px solid #cbd5e1',
-                    background: splitMethod === m.id ? '#0f172a' : '#ffffff',
-                    color: splitMethod === m.id ? '#ffffff' : '#475569',
-                  }}
-                >
-                  {m.label}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* LIVE MATH BREAKDOWN BAR (Compact & Clean) */}
-        {splitMethod === 'individual_remainder' && totalPaise > 0 && (
-          <div style={{
-            background: isIndividualTotalOver ? '#fef2f2' : '#f0fdf4',
-            border: isIndividualTotalOver ? '1px solid #fecaca' : '1px solid #bbf7d0',
-            borderRadius: '12px',
-            padding: '0.75rem 1rem',
-            display: 'flex',
-            flexWrap: 'wrap',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            fontSize: '0.82rem',
-            gap: '0.5rem',
-          }}>
-            <div>
-              <span style={{ color: '#64748b' }}>{t.customItems}: </span>
-              <strong style={{ color: isIndividualTotalOver ? '#dc2626' : '#0f172a' }}>{formatINR(individualTotalPaise)}</strong>
-            </div>
-            <div>
-              <span style={{ color: '#64748b' }}>{t.remainingToShare}: </span>
-              <strong style={{ color: sharedRemainderPaise < 0 ? '#dc2626' : '#059669' }}>
-                {sharedRemainderPaise < 0 ? `Over by ${formatINR(Math.abs(sharedRemainderPaise))}` : formatINR(sharedRemainderPaise)}
-              </strong>
-            </div>
-            {selectedKeys.length > 0 && sharedRemainderPaise > 0 && (
-              <div>
-                <span style={{ color: '#059669', fontWeight: 700 }}>
-                  +{formatINR(equalRemainderPerPersonPaise)} / person
-                </span>
+              <div style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '10px',
+                background: mainOption === 'equal' ? '#0f172a' : '#f1f5f9',
+                color: mainOption === 'equal' ? '#ffffff' : '#64748b',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}>
+                <Scale size={18} />
               </div>
-            )}
-          </div>
-        )}
-
-        {/* PARTICIPANTS LIST */}
-        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '1.25rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-            <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#0f172a' }}>
-              {t.participatingMembers} ({selectedKeys.length} / {participants.length})
-              {splitMethod === 'equal' && selectedKeys.length > 0 && totalPaise > 0 && (
-                <span style={{ color: '#059669', fontWeight: 600, marginLeft: '0.4rem' }}>
-                  (≈ {formatINR(equalSharePaise)})
-                </span>
-              )}
-            </span>
-            <div style={{ display: 'flex', gap: '0.4rem' }}>
-              <button
-                type="button"
-                onClick={selectAll}
-                className="btn btn-secondary btn-sm"
-                style={{ fontSize: '0.74rem', padding: '0.2rem 0.55rem' }}
-              >
-                {t.selectAll}
-              </button>
-              <button
-                type="button"
-                onClick={selectNone}
-                className="btn btn-secondary btn-sm"
-                style={{ fontSize: '0.74rem', padding: '0.2rem 0.55rem', color: '#dc2626' }}
-              >
-                {t.selectNone}
-              </button>
-            </div>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.5rem', maxHeight: '240px', overflowY: 'auto', paddingRight: '2px' }}>
-            {participants.map(p => {
-              const key = `p:${p.id}`;
-              const isSelected = selectedKeys.includes(key);
-              const previewAlloc = preview?.allocations?.find((a: any) => a.id === key);
-              const finalAmount = previewAlloc ? previewAlloc.amount : (splitMethod === 'equal' && isSelected ? equalSharePaise : 0);
-
-              return (
-                <div
-                  key={key}
-                  onClick={() => toggleKey(key)}
-                  style={{
-                    padding: '0.65rem 0.8rem',
-                    borderRadius: '10px',
-                    background: isSelected ? '#ffffff' : '#f1f5f9',
-                    border: isSelected ? '1.5px solid #0f172a' : '1px solid #e2e8f0',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '0.35rem',
-                    transition: 'all 0.15s ease',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
-                      <div style={{
-                        width: '28px',
-                        height: '28px',
-                        borderRadius: '50%',
-                        background: isSelected ? '#0f172a' : '#cbd5e1',
-                        color: isSelected ? '#ffffff' : '#475569',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontWeight: 700,
-                        fontSize: '0.75rem',
-                        flexShrink: 0,
-                      }}>
-                        {p.display_name.charAt(0).toUpperCase()}
-                      </div>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontWeight: 700, fontSize: '0.84rem', color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {p.display_name}
-                        </div>
-                        {p.family_name && (
-                          <div style={{ fontSize: '0.7rem', color: '#64748b' }}>{p.family_name}</div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div style={{
-                      width: '18px',
-                      height: '18px',
-                      borderRadius: '4px',
-                      border: isSelected ? '1px solid #0f172a' : '1px solid #cbd5e1',
-                      background: isSelected ? '#0f172a' : '#ffffff',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: '#ffffff',
-                      flexShrink: 0,
-                    }}>
-                      {isSelected && <Check size={12} />}
-                    </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#0f172a' }}>
+                    1. {t.equalSplit}
                   </div>
-
-                  {/* Individual input when individual_remainder is active */}
-                  {isSelected && splitMethod === 'individual_remainder' && (
-                    <div
-                      style={{ marginTop: '0.35rem', paddingTop: '0.35rem', borderTop: '1px solid #f1f5f9' }}
-                      onClick={e => e.stopPropagation()}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.2rem' }}>
-                        <span style={{ fontSize: '0.7rem', color: '#64748b' }}>{t.individualPortion}:</span>
-                        {finalAmount > 0 && (
-                          <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#059669' }}>
-                            {formatINR(finalAmount)}
-                          </span>
-                        )}
-                      </div>
-                      <div style={{ position: 'relative' }}>
-                        <span style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', fontSize: '0.75rem' }}>₹</span>
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          className="form-input"
-                          style={{ padding: '0.3rem 0.5rem 0.3rem 1.4rem', fontSize: '0.78rem' }}
-                          placeholder="0.00"
-                          value={individualAmounts[key] ?? ''}
-                          onChange={e => setIndividualAmounts({ ...individualAmounts, [key]: e.target.value })}
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Custom amount input */}
-                  {isSelected && splitMethod === 'custom' && (
-                    <div
-                      style={{ marginTop: '0.35rem', paddingTop: '0.35rem', borderTop: '1px solid #f1f5f9' }}
-                      onClick={e => e.stopPropagation()}
-                    >
-                      <div style={{ position: 'relative' }}>
-                        <span style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', fontSize: '0.75rem' }}>₹</span>
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          className="form-input"
-                          style={{ padding: '0.3rem 0.5rem 0.3rem 1.4rem', fontSize: '0.78rem' }}
-                          placeholder="0.00"
-                          value={customAmounts[key] ?? ''}
-                          onChange={e => setCustomAmounts({ ...customAmounts, [key]: e.target.value })}
-                        />
-                      </div>
+                  {mainOption === 'equal' && (
+                    <div style={{ width: '18px', height: '18px', borderRadius: '50%', background: '#0f172a', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Check size={11} />
                     </div>
                   )}
                 </div>
-              );
-            })}
+                <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: '0.2rem', lineHeight: 1.35 }}>
+                  {t.equalSplitDesc}
+                </div>
+              </div>
+            </div>
+
+            {/* OPTION 2: CUSTOM AMOUNT */}
+            <div
+              onClick={() => setMainOption('custom')}
+              style={{
+                padding: '1rem',
+                borderRadius: '14px',
+                border: mainOption === 'custom' ? '2px solid #0f172a' : '1px solid #e2e8f0',
+                background: mainOption === 'custom' ? '#f8fafc' : '#ffffff',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '0.75rem',
+                boxShadow: mainOption === 'custom' ? '0 4px 12px rgba(15,23,42,0.08)' : 'none',
+              }}
+            >
+              <div style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '10px',
+                background: mainOption === 'custom' ? '#0f172a' : '#f1f5f9',
+                color: mainOption === 'custom' ? '#ffffff' : '#64748b',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}>
+                <Edit3 size={18} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#0f172a' }}>
+                    2. {t.customAmount}
+                  </div>
+                  {mainOption === 'custom' && (
+                    <div style={{ width: '18px', height: '18px', borderRadius: '50%', background: '#0f172a', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Check size={11} />
+                    </div>
+                  )}
+                </div>
+                <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: '0.2rem', lineHeight: 1.35 }}>
+                  {t.customAmountDesc}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
+
+        {/* SUB-OPTION TOGGLE: PER HEAD vs FAMILY-WISE */}
+        <div style={{
+          background: '#f1f5f9',
+          padding: '0.35rem',
+          borderRadius: '12px',
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: '0.35rem',
+        }}>
+          <button
+            type="button"
+            onClick={() => setSubOption('per_head')}
+            style={{
+              padding: '0.6rem 1rem',
+              borderRadius: '9px',
+              border: 'none',
+              background: subOption === 'per_head' ? '#ffffff' : 'transparent',
+              color: subOption === 'per_head' ? '#0f172a' : '#64748b',
+              fontWeight: 700,
+              fontSize: '0.85rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.45rem',
+              boxShadow: subOption === 'per_head' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <User size={15} />
+            <span>A. {t.perHeadSubOption}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSubOption('family_wise')}
+            style={{
+              padding: '0.6rem 1rem',
+              borderRadius: '9px',
+              border: 'none',
+              background: subOption === 'family_wise' ? '#ffffff' : 'transparent',
+              color: subOption === 'family_wise' ? '#0f172a' : '#64748b',
+              fontWeight: 700,
+              fontSize: '0.85rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.45rem',
+              boxShadow: subOption === 'family_wise' ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <Users size={15} />
+            <span>B. {t.familyWiseSubOption}</span>
+          </button>
+        </div>
+
+        {/* ========================================================================= */}
+        {/* VIEW 1: EQUAL SPLIT -> PER HEAD                                          */}
+        {/* ========================================================================= */}
+        {mainOption === 'equal' && subOption === 'per_head' && (
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '1.25rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <div>
+                <span style={{ fontSize: '0.86rem', fontWeight: 800, color: '#0f172a' }}>
+                  {t.participatingMembers} ({selectedPersonKeys.length} / {participants.length})
+                </span>
+                <p style={{ margin: '0.15rem 0 0 0', fontSize: '0.73rem', color: '#64748b' }}>
+                  {category === 'Food' ? 'Select people who ate. Exclude those who did not eat (charged ₹0).' : t.perHeadEqualDesc}
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: '0.4rem' }}>
+                <button
+                  type="button"
+                  onClick={selectAllPersons}
+                  className="btn btn-secondary btn-sm"
+                  style={{ fontSize: '0.74rem', padding: '0.2rem 0.6rem' }}
+                >
+                  {t.selectAll}
+                </button>
+                <button
+                  type="button"
+                  onClick={selectNonePersons}
+                  className="btn btn-secondary btn-sm"
+                  style={{ fontSize: '0.74rem', padding: '0.2rem 0.6rem', color: '#dc2626' }}
+                >
+                  {t.selectNone}
+                </button>
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: '0.55rem', maxHeight: '280px', overflowY: 'auto', paddingRight: '2px' }}>
+              {participants.map(p => {
+                const key = `p:${p.id}`;
+                const isSelected = selectedPersonKeys.includes(key);
+                const alloc = preview?.allocations?.find((a: any) => a.id === key);
+                const sharePaise = alloc ? alloc.amount : (isSelected && selectedPersonKeys.length > 0 ? Math.floor(totalPaise / selectedPersonKeys.length) : 0);
+
+                return (
+                  <div
+                    key={key}
+                    onClick={() => togglePerson(key)}
+                    style={{
+                      padding: '0.7rem 0.85rem',
+                      borderRadius: '12px',
+                      background: isSelected ? '#ffffff' : '#f1f5f9',
+                      border: isSelected ? '1.5px solid #0f172a' : '1px solid #e2e8f0',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.35rem',
+                      transition: 'all 0.15s ease',
+                      opacity: isSelected ? 1 : 0.65,
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
+                        <div style={{
+                          width: '28px',
+                          height: '28px',
+                          borderRadius: '50%',
+                          background: isSelected ? '#0f172a' : '#cbd5e1',
+                          color: isSelected ? '#ffffff' : '#475569',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontWeight: 700,
+                          fontSize: '0.75rem',
+                          flexShrink: 0,
+                        }}>
+                          {p.display_name.charAt(0).toUpperCase()}
+                        </div>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontWeight: 700, fontSize: '0.84rem', color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {p.display_name}
+                          </div>
+                          {p.family_name && (
+                            <div style={{ fontSize: '0.7rem', color: '#64748b' }}>{p.family_name}</div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div style={{
+                        width: '18px',
+                        height: '18px',
+                        borderRadius: '4px',
+                        border: isSelected ? '1px solid #0f172a' : '1px solid #cbd5e1',
+                        background: isSelected ? '#0f172a' : '#ffffff',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#ffffff',
+                        flexShrink: 0,
+                      }}>
+                        {isSelected && <Check size={12} />}
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.2rem', paddingTop: '0.3rem', borderTop: '1px solid #f1f5f9', fontSize: '0.72rem' }}>
+                      <span style={{ color: isSelected ? '#15803d' : '#94a3b8', fontWeight: 600 }}>
+                        {isSelected ? (category === 'Food' ? t.ateFood : t.includedInSplit) : (category === 'Food' ? t.didNotEat : t.excludedFromSplit)}
+                      </span>
+                      <strong style={{ color: isSelected ? '#0f172a' : '#94a3b8' }}>
+                        {isSelected ? formatINR(sharePaise) : '₹0'}
+                      </strong>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* VIEW 2: EQUAL SPLIT -> FAMILY-WISE                                       */}
+        {/* ========================================================================= */}
+        {mainOption === 'equal' && subOption === 'family_wise' && (
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '1.25rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <div>
+                <span style={{ fontSize: '0.86rem', fontWeight: 800, color: '#0f172a' }}>
+                  {t.familyWiseSplit} ({selectedFamilyKeys.length} / {families.length} {t.familiesGroup})
+                </span>
+                <p style={{ margin: '0.15rem 0 0 0', fontSize: '0.73rem', color: '#64748b' }}>
+                  {t.familyWiseEqualDesc}
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: '0.4rem' }}>
+                <button
+                  type="button"
+                  onClick={selectAllFamilies}
+                  className="btn btn-secondary btn-sm"
+                  style={{ fontSize: '0.74rem', padding: '0.2rem 0.6rem' }}
+                >
+                  {t.selectAll}
+                </button>
+                <button
+                  type="button"
+                  onClick={selectNoneFamilies}
+                  className="btn btn-secondary btn-sm"
+                  style={{ fontSize: '0.74rem', padding: '0.2rem 0.6rem', color: '#dc2626' }}
+                >
+                  {t.selectNone}
+                </button>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {families.map(f => {
+                const fKey = `f:${f.id}`;
+                const isFamilySelected = selectedFamilyKeys.includes(fKey);
+                const famMembers = participants.filter(p => p.family_id === f.id);
+                const includedMemberKeys = familyMemberInclusions[fKey] || [];
+                const isExpanded = Boolean(expandedFamilies[fKey]);
+
+                // Family share in preview or calculated
+                const famAlloc = preview?.allocations?.find((a: any) => a.id === fKey);
+                const familySharePaise = famAlloc
+                  ? famAlloc.amount
+                  : (isFamilySelected && selectedFamilyKeys.length > 0 ? Math.floor(totalPaise / selectedFamilyKeys.length) : 0);
+
+                return (
+                  <div
+                    key={fKey}
+                    style={{
+                      background: isFamilySelected ? '#ffffff' : '#f1f5f9',
+                      border: isFamilySelected ? '1.5px solid #0f172a' : '1px solid #e2e8f0',
+                      borderRadius: '14px',
+                      padding: '0.9rem 1rem',
+                      transition: 'all 0.15s ease',
+                      opacity: isFamilySelected ? 1 : 0.65,
+                    }}
+                  >
+                    {/* Family Header */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div
+                        onClick={() => toggleFamily(fKey)}
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', cursor: 'pointer', flex: 1 }}
+                      >
+                        <div style={{
+                          width: '20px',
+                          height: '20px',
+                          borderRadius: '4px',
+                          border: isFamilySelected ? '1px solid #0f172a' : '1px solid #cbd5e1',
+                          background: isFamilySelected ? '#0f172a' : '#ffffff',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#ffffff',
+                          flexShrink: 0,
+                        }}>
+                          {isFamilySelected && <Check size={13} />}
+                        </div>
+                        <div>
+                          <span style={{ fontWeight: 800, fontSize: '0.92rem', color: '#0f172a' }}>
+                            {f.name}
+                          </span>
+                          <span style={{ fontSize: '0.73rem', color: '#64748b', marginLeft: '0.5rem' }}>
+                            ({includedMemberKeys.length} / {famMembers.length} {t.membersGroup})
+                          </span>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+                        <div style={{ textAlign: 'right' }}>
+                          <span style={{ fontSize: '0.68rem', color: '#64748b', textTransform: 'uppercase', display: 'block', fontWeight: 600 }}>
+                            {t.familyContribution}
+                          </span>
+                          <strong style={{ fontSize: '0.98rem', color: isFamilySelected ? '#0f172a' : '#94a3b8' }}>
+                            {isFamilySelected ? formatINR(familySharePaise) : '₹0'}
+                          </strong>
+                        </div>
+
+                        {famMembers.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setExpandedFamilies(prev => ({ ...prev, [fKey]: !prev[fKey] }))}
+                            style={{
+                              background: '#f1f5f9',
+                              border: '1px solid #e2e8f0',
+                              borderRadius: '8px',
+                              padding: '0.3rem 0.55rem',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.2rem',
+                              fontSize: '0.74rem',
+                              color: '#475569',
+                              fontWeight: 600,
+                            }}
+                          >
+                            <span>{isExpanded ? t.collapseFamilyMembers : t.expandFamilyMembers}</span>
+                            {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Member Breakdown Inside Family */}
+                    {isExpanded && isFamilySelected && famMembers.length > 0 && (
+                      <div style={{ marginTop: '0.85rem', paddingTop: '0.85rem', borderTop: '1px solid #e2e8f0' }}>
+                        <div style={{ fontSize: '0.73rem', color: '#64748b', fontWeight: 700, marginBottom: '0.5rem' }}>
+                          {category === 'Food' ? 'Select family members who ate (family share divides among them):' : 'Included family members:'}
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '0.45rem' }}>
+                          {famMembers.map(m => {
+                            const mKey = `p:${m.id}`;
+                            const isMemberIncluded = includedMemberKeys.includes(mKey);
+                            const memberSharePaise = (isMemberIncluded && includedMemberKeys.length > 0)
+                              ? Math.floor(familySharePaise / includedMemberKeys.length)
+                              : 0;
+
+                            return (
+                              <div
+                                key={mKey}
+                                onClick={() => toggleFamilyMember(fKey, mKey)}
+                                style={{
+                                  padding: '0.55rem 0.7rem',
+                                  borderRadius: '8px',
+                                  background: isMemberIncluded ? '#f0fdf4' : '#f8fafc',
+                                  border: isMemberIncluded ? '1px solid #bbf7d0' : '1px solid #e2e8f0',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  fontSize: '0.78rem',
+                                }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                  <div style={{
+                                    width: '14px',
+                                    height: '14px',
+                                    borderRadius: '3px',
+                                    border: isMemberIncluded ? '1px solid #16a34a' : '1px solid #cbd5e1',
+                                    background: isMemberIncluded ? '#16a34a' : '#ffffff',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    color: '#ffffff',
+                                  }}>
+                                    {isMemberIncluded && <Check size={10} />}
+                                  </div>
+                                  <span style={{ fontWeight: 600, color: isMemberIncluded ? '#0f172a' : '#94a3b8' }}>
+                                    {m.display_name}
+                                  </span>
+                                </div>
+                                <span style={{ fontWeight: 700, color: isMemberIncluded ? '#15803d' : '#94a3b8' }}>
+                                  {isMemberIncluded ? formatINR(memberSharePaise) : '₹0'}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* VIEW 3: CUSTOM AMOUNT -> PER HEAD                                         */}
+        {/* ========================================================================= */}
+        {mainOption === 'custom' && subOption === 'per_head' && (
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '1.25rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <div>
+                <span style={{ fontSize: '0.86rem', fontWeight: 800, color: '#0f172a' }}>
+                  {t.perHeadCustomDesc}
+                </span>
+                <p style={{ margin: '0.15rem 0 0 0', fontSize: '0.73rem', color: '#64748b' }}>
+                  {t.perHeadCustomDesc}
+                </p>
+              </div>
+
+              {/* Remainder distribution toggle */}
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.78rem', color: '#0f172a', fontWeight: 600, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={splitRemainderEqually}
+                  onChange={e => setSplitRemainderEqually(e.target.checked)}
+                  style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                />
+                <span>{t.splitRemainderEqually}</span>
+              </label>
+            </div>
+
+            {/* RUNNING TOTAL & VALIDATION STATUS BAR */}
+            <div style={{
+              background: isPersonMatched ? '#f0fdf4' : isPersonOver ? '#fef2f2' : '#fffbeb',
+              border: isPersonMatched ? '1px solid #bbf7d0' : isPersonOver ? '1px solid #fecaca' : '1px solid #fde68a',
+              borderRadius: '12px',
+              padding: '0.75rem 1rem',
+              display: 'flex',
+              flexWrap: 'wrap',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              fontSize: '0.82rem',
+              gap: '0.6rem',
+              marginBottom: '1rem',
+            }}>
+              <div>
+                <span style={{ color: '#64748b' }}>{t.runningTotal}: </span>
+                <strong style={{ color: isPersonOver ? '#dc2626' : '#0f172a' }}>
+                  {formatINR(personAllocatedPaise)}
+                </strong>
+                <span style={{ color: '#94a3b8', margin: '0 0.35rem' }}>/</span>
+                <span style={{ color: '#64748b' }}>{formatINR(totalPaise)}</span>
+              </div>
+
+              <div>
+                {isPersonMatched ? (
+                  <span style={{ color: '#15803d', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                    <CheckCircle2 size={15} /> {t.perfectReconciliation}
+                  </span>
+                ) : isPersonOver ? (
+                  <span style={{ color: '#dc2626', fontWeight: 700 }}>
+                    ⚠️ {t.excessAmount}: {formatINR(Math.abs(personRemainingPaise))}
+                  </span>
+                ) : (
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span style={{ color: '#b45309', fontWeight: 700 }}>
+                      {t.remainingBalance}: {formatINR(personRemainingPaise)}
+                    </span>
+                    {!splitRemainderEqually && personRemainingPaise > 0 && (
+                      <button
+                        type="button"
+                        onClick={autoFillRemainingPerHead}
+                        className="btn btn-secondary btn-sm"
+                        style={{ fontSize: '0.72rem', padding: '0.15rem 0.45rem' }}
+                      >
+                        Auto-fill
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {splitRemainderEqually && selectedPersonKeys.length > 0 && personRemainingPaise > 0 && (
+                <div style={{ width: '100%', fontSize: '0.75rem', color: '#059669', fontWeight: 600, borderTop: '1px dashed #bbf7d0', paddingTop: '0.35rem' }}>
+                  +{formatINR(equalRemainderPerPersonPaise)} / member added from shared remainder
+                </div>
+              )}
+            </div>
+
+            {/* List of participants with custom inputs */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '0.6rem', maxHeight: '300px', overflowY: 'auto', paddingRight: '2px' }}>
+              {participants.map(p => {
+                const key = `p:${p.id}`;
+                const isSelected = selectedPersonKeys.includes(key);
+                const alloc = preview?.allocations?.find((a: any) => a.id === key);
+                const finalSharePaise = alloc
+                  ? alloc.amount
+                  : isSelected
+                    ? toPaise(customPersonAmounts[key] || '0') + (splitRemainderEqually ? equalRemainderPerPersonPaise : 0)
+                    : 0;
+
+                return (
+                  <div
+                    key={key}
+                    style={{
+                      padding: '0.75rem 0.85rem',
+                      borderRadius: '12px',
+                      background: isSelected ? '#ffffff' : '#f1f5f9',
+                      border: isSelected ? '1.5px solid #0f172a' : '1px solid #e2e8f0',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.45rem',
+                      opacity: isSelected ? 1 : 0.65,
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div
+                        onClick={() => togglePerson(key)}
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', minWidth: 0, flex: 1 }}
+                      >
+                        <div style={{
+                          width: '18px',
+                          height: '18px',
+                          borderRadius: '4px',
+                          border: isSelected ? '1px solid #0f172a' : '1px solid #cbd5e1',
+                          background: isSelected ? '#0f172a' : '#ffffff',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#ffffff',
+                          flexShrink: 0,
+                        }}>
+                          {isSelected && <Check size={12} />}
+                        </div>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontWeight: 700, fontSize: '0.84rem', color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {p.display_name}
+                          </div>
+                          {p.family_name && (
+                            <div style={{ fontSize: '0.7rem', color: '#64748b' }}>{p.family_name}</div>
+                          )}
+                        </div>
+                      </div>
+
+                      {isSelected && (
+                        <div style={{ textAlign: 'right' }}>
+                          <span style={{ fontSize: '0.68rem', color: '#64748b', display: 'block' }}>Owes</span>
+                          <strong style={{ fontSize: '0.82rem', color: '#059669' }}>{formatINR(finalSharePaise)}</strong>
+                        </div>
+                      )}
+                    </div>
+
+                    {isSelected && (
+                      <div style={{ position: 'relative', marginTop: '0.2rem' }}>
+                        <span style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', fontSize: '0.8rem' }}>₹</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          className="form-input"
+                          style={{ padding: '0.35rem 0.5rem 0.35rem 1.4rem', fontSize: '0.82rem', fontWeight: 600 }}
+                          placeholder="0.00"
+                          value={customPersonAmounts[key] ?? ''}
+                          onChange={e => setCustomPersonAmounts({ ...customPersonAmounts, [key]: e.target.value })}
+                        />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* VIEW 4: CUSTOM AMOUNT -> FAMILY-WISE                                     */}
+        {/* ========================================================================= */}
+        {mainOption === 'custom' && subOption === 'family_wise' && (
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '1.25rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <div>
+                <span style={{ fontSize: '0.86rem', fontWeight: 800, color: '#0f172a' }}>
+                  {t.familyWiseCustomDesc}
+                </span>
+                <p style={{ margin: '0.15rem 0 0 0', fontSize: '0.73rem', color: '#64748b' }}>
+                  Enter each family's contribution, expand to manage member participation.
+                </p>
+              </div>
+            </div>
+
+            {/* RUNNING TOTAL & VALIDATION STATUS BAR */}
+            <div style={{
+              background: isFamilyMatched ? '#f0fdf4' : isFamilyOver ? '#fef2f2' : '#fffbeb',
+              border: isFamilyMatched ? '1px solid #bbf7d0' : isFamilyOver ? '1px solid #fecaca' : '1px solid #fde68a',
+              borderRadius: '12px',
+              padding: '0.75rem 1rem',
+              display: 'flex',
+              flexWrap: 'wrap',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              fontSize: '0.82rem',
+              gap: '0.6rem',
+              marginBottom: '1rem',
+            }}>
+              <div>
+                <span style={{ color: '#64748b' }}>{t.runningTotal}: </span>
+                <strong style={{ color: isFamilyOver ? '#dc2626' : '#0f172a' }}>
+                  {formatINR(familyAllocatedPaise)}
+                </strong>
+                <span style={{ color: '#94a3b8', margin: '0 0.35rem' }}>/</span>
+                <span style={{ color: '#64748b' }}>{formatINR(totalPaise)}</span>
+              </div>
+
+              <div>
+                {isFamilyMatched ? (
+                  <span style={{ color: '#15803d', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                    <CheckCircle2 size={15} /> {t.perfectReconciliation}
+                  </span>
+                ) : isFamilyOver ? (
+                  <span style={{ color: '#dc2626', fontWeight: 700 }}>
+                    ⚠️ {t.excessAmount}: {formatINR(Math.abs(familyRemainingPaise))}
+                  </span>
+                ) : (
+                  <span style={{ color: '#b45309', fontWeight: 700 }}>
+                    {t.remainingBalance}: {formatINR(familyRemainingPaise)}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* List of families with custom amount inputs */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {families.map(f => {
+                const fKey = `f:${f.id}`;
+                const isFamilySelected = selectedFamilyKeys.includes(fKey);
+                const famMembers = participants.filter(p => p.family_id === f.id);
+                const includedMemberKeys = familyMemberInclusions[fKey] || [];
+                const isExpanded = Boolean(expandedFamilies[fKey]);
+                const familyPaise = toPaise(customFamilyAmounts[fKey] || '0');
+
+                return (
+                  <div
+                    key={fKey}
+                    style={{
+                      background: isFamilySelected ? '#ffffff' : '#f1f5f9',
+                      border: isFamilySelected ? '1.5px solid #0f172a' : '1px solid #e2e8f0',
+                      borderRadius: '14px',
+                      padding: '0.9rem 1rem',
+                      opacity: isFamilySelected ? 1 : 0.65,
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      <div
+                        onClick={() => toggleFamily(fKey)}
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', cursor: 'pointer' }}
+                      >
+                        <div style={{
+                          width: '20px',
+                          height: '20px',
+                          borderRadius: '4px',
+                          border: isFamilySelected ? '1px solid #0f172a' : '1px solid #cbd5e1',
+                          background: isFamilySelected ? '#0f172a' : '#ffffff',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#ffffff',
+                        }}>
+                          {isFamilySelected && <Check size={13} />}
+                        </div>
+                        <div>
+                          <span style={{ fontWeight: 800, fontSize: '0.92rem', color: '#0f172a' }}>
+                            {f.name}
+                          </span>
+                          <span style={{ fontSize: '0.73rem', color: '#64748b', marginLeft: '0.5rem' }}>
+                            ({includedMemberKeys.length} / {famMembers.length} {t.membersGroup})
+                          </span>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        {isFamilySelected && (
+                          <div style={{ position: 'relative', width: '130px' }}>
+                            <span style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', fontSize: '0.8rem' }}>₹</span>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              className="form-input"
+                              style={{ padding: '0.35rem 0.5rem 0.35rem 1.4rem', fontSize: '0.82rem', fontWeight: 700 }}
+                              placeholder="0.00"
+                              value={customFamilyAmounts[fKey] ?? ''}
+                              onChange={e => setCustomFamilyAmounts({ ...customFamilyAmounts, [fKey]: e.target.value })}
+                            />
+                          </div>
+                        )}
+
+                        {famMembers.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setExpandedFamilies(prev => ({ ...prev, [fKey]: !prev[fKey] }))}
+                            style={{
+                              background: '#f1f5f9',
+                              border: '1px solid #e2e8f0',
+                              borderRadius: '8px',
+                              padding: '0.3rem 0.55rem',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.2rem',
+                              fontSize: '0.74rem',
+                              color: '#475569',
+                              fontWeight: 600,
+                            }}
+                          >
+                            <span>{isExpanded ? t.collapseFamilyMembers : t.expandFamilyMembers}</span>
+                            {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Member Breakdown Inside Family */}
+                    {isExpanded && isFamilySelected && famMembers.length > 0 && (
+                      <div style={{ marginTop: '0.85rem', paddingTop: '0.85rem', borderTop: '1px solid #e2e8f0' }}>
+                        <div style={{ fontSize: '0.73rem', color: '#64748b', fontWeight: 700, marginBottom: '0.5rem' }}>
+                          Manage family members (exclude members who did not participate):
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '0.45rem' }}>
+                          {famMembers.map(m => {
+                            const mKey = `p:${m.id}`;
+                            const isMemberIncluded = includedMemberKeys.includes(mKey);
+                            const memberSharePaise = (isMemberIncluded && includedMemberKeys.length > 0)
+                              ? Math.floor(familyPaise / includedMemberKeys.length)
+                              : 0;
+
+                            return (
+                              <div
+                                key={mKey}
+                                onClick={() => toggleFamilyMember(fKey, mKey)}
+                                style={{
+                                  padding: '0.55rem 0.7rem',
+                                  borderRadius: '8px',
+                                  background: isMemberIncluded ? '#f0fdf4' : '#f8fafc',
+                                  border: isMemberIncluded ? '1px solid #bbf7d0' : '1px solid #e2e8f0',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  fontSize: '0.78rem',
+                                }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                  <div style={{
+                                    width: '14px',
+                                    height: '14px',
+                                    borderRadius: '3px',
+                                    border: isMemberIncluded ? '1px solid #16a34a' : '1px solid #cbd5e1',
+                                    background: isMemberIncluded ? '#16a34a' : '#ffffff',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    color: '#ffffff',
+                                  }}>
+                                    {isMemberIncluded && <Check size={10} />}
+                                  </div>
+                                  <span style={{ fontWeight: 600, color: isMemberIncluded ? '#0f172a' : '#94a3b8' }}>
+                                    {m.display_name}
+                                  </span>
+                                </div>
+                                <span style={{ fontWeight: 700, color: isMemberIncluded ? '#15803d' : '#94a3b8' }}>
+                                  {isMemberIncluded ? formatINR(memberSharePaise) : '₹0'}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* BOTTOM ACTION BUTTONS */}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
@@ -759,11 +1712,22 @@ export const ExpenseSplitWizard: React.FC<Props> = ({
           </button>
           <button
             type="submit"
-            disabled={isSubmitting || totalPaise <= 0 || !title.trim() || isIndividualTotalOver}
+            disabled={
+              isSubmitting ||
+              totalPaise <= 0 ||
+              !title.trim() ||
+              (mainOption === 'custom' && subOption === 'per_head' && !splitRemainderEqually && !isPersonMatched) ||
+              (mainOption === 'custom' && subOption === 'per_head' && splitRemainderEqually && isPersonOver) ||
+              (mainOption === 'custom' && subOption === 'family_wise' && !isFamilyMatched)
+            }
             className="btn btn-primary"
-            style={{ minWidth: '180px', justifyContent: 'center' }}
+            style={{ minWidth: '190px', justifyContent: 'center' }}
           >
-            {isSubmitting ? t.savingExpense : `${t.saveExpenseBtn} (${totalPaise > 0 ? formatINR(totalPaise) : '₹0'})`}
+            {isSubmitting
+              ? (isEditing ? t.updatingExpense : t.savingExpense)
+              : isEditing
+                ? `${t.updateExpenseBtn} (${totalPaise > 0 ? formatINR(totalPaise) : '₹0'})`
+                : `${t.saveExpenseBtn} (${totalPaise > 0 ? formatINR(totalPaise) : '₹0'})`}
           </button>
         </div>
       </form>

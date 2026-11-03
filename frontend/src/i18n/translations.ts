@@ -63,6 +63,34 @@ export interface Translations {
   equalSplit: string;
   perHeadSplit: string;
   customSplit: string;
+  customAmount: string;
+  perHeadSubOption: string;
+  familyWiseSubOption: string;
+  equalSplitDesc: string;
+  customAmountDesc: string;
+  perHeadEqualDesc: string;
+  familyWiseEqualDesc: string;
+  perHeadCustomDesc: string;
+  familyWiseCustomDesc: string;
+  whoAte: string;
+  ateFood: string;
+  didNotEat: string;
+  splitRemainderEqually: string;
+  editExpense: string;
+  editExpenseSubtitle: string;
+  updateExpenseBtn: string;
+  updatingExpense: string;
+  allocatedTotal: string;
+  runningTotal: string;
+  remainingBalance: string;
+  excessAmount: string;
+  expandFamilyMembers: string;
+  collapseFamilyMembers: string;
+  familyContribution: string;
+  memberPortion: string;
+  includedInSplit: string;
+  excludedFromSplit: string;
+  perfectReconciliation: string;
   percentageSplit: string;
   familyWiseSplit: string;
   mixedSplit: string;
@@ -452,6 +480,34 @@ export const translations: Record<Language, Translations> = {
     equalSplit: 'Equal Split',
     perHeadSplit: 'Per-Head (Rate × Heads)',
     customSplit: 'Custom Amount',
+    customAmount: 'Custom Amount',
+    perHeadSubOption: 'Per Head',
+    familyWiseSubOption: 'Family-Wise',
+    equalSplitDesc: 'Divide equally among participating individuals or families',
+    customAmountDesc: 'Specify exact contributions per individual or per family',
+    perHeadEqualDesc: 'Divide equally among selected members who participated',
+    familyWiseEqualDesc: 'Divide equally among selected families and their members',
+    perHeadCustomDesc: 'Enter specific amounts for each participating member',
+    familyWiseCustomDesc: 'Enter specific amounts per family and distribute internally',
+    whoAte: 'Who ate? (Food Expense)',
+    ateFood: 'Ate / Included',
+    didNotEat: 'Did not eat (₹0)',
+    splitRemainderEqually: 'Divide remaining balance equally among participants',
+    editExpense: 'Edit Expense',
+    editExpenseSubtitle: 'Update expense details and recalculate participant shares.',
+    updateExpenseBtn: 'Update Expense',
+    updatingExpense: 'Updating Expense...',
+    allocatedTotal: 'Allocated Total',
+    runningTotal: 'Running Total',
+    remainingBalance: 'Remaining',
+    excessAmount: 'Excess',
+    expandFamilyMembers: 'Expand Members',
+    collapseFamilyMembers: 'Collapse Members',
+    familyContribution: 'Family Contribution',
+    memberPortion: 'Member Portion',
+    includedInSplit: 'Included',
+    excludedFromSplit: 'Excluded (₹0)',
+    perfectReconciliation: 'Perfectly balanced: total allocated matches the bill',
     percentageSplit: 'Percentage Split',
     familyWiseSplit: 'Family-Wise',
     mixedSplit: 'Mixed (Individual & Families)',
@@ -836,6 +892,34 @@ export const translations: Record<Language, Translations> = {
     equalSplit: 'సమాన విభజన',
     perHeadSplit: 'తలసరి (ధర × సంఖ్య)',
     customSplit: 'అనుకూల మొత్తం',
+    customAmount: 'అనుకూల మొత్తం',
+    perHeadSubOption: 'వ్యక్తిగతంగా / తలసరి',
+    familyWiseSubOption: 'కుటుంబాల వారీగా',
+    equalSplitDesc: 'పాల్గొన్న వ్యక్తులు లేదా కుటుంబాల మధ్య సమానంగా విభజించండి',
+    customAmountDesc: 'ప్రతి వ్యక్తి లేదా కుటుంబానికి నిర్దిష్ట మొత్తాన్ని నమోదు చేయండి',
+    perHeadEqualDesc: 'పాల్గొన్న సభ్యుల మధ్య సమానంగా విభజించండి',
+    familyWiseEqualDesc: 'ఎంచుకున్న కుటుంబాలు మరియు వాటి సభ్యుల మధ్య సమానంగా విభజించండి',
+    perHeadCustomDesc: 'ప్రతి సభ్యుడికి నిర్దిష్ట మొత్తాన్ని నమోదు చేయండి',
+    familyWiseCustomDesc: 'కుటుంబానికి మొత్తాన్ని కేటాయించి సభ్యుల మధ్య విభజించండి',
+    whoAte: 'ఎవరు తిన్నారు? (ఆహార ఖర్చు)',
+    ateFood: 'తిన్నారు / పాల్గొన్నారు',
+    didNotEat: 'తినలేదు (₹0)',
+    splitRemainderEqually: 'మిగిలిన మొత్తాన్ని సభ్యుల మధ్య సమానంగా పంచుకోండి',
+    editExpense: 'ఖర్చును సవరించండి',
+    editExpenseSubtitle: 'ఖర్చు వివరాలను సవరించి వాటాలను తిరిగి లెక్కించండి.',
+    updateExpenseBtn: 'ఖర్చును నవీకరించు',
+    updatingExpense: 'నవీకరిస్తోంది...',
+    allocatedTotal: 'కేటాయించిన మొత్తం',
+    runningTotal: 'ప్రస్తుత మొత్తం',
+    remainingBalance: 'మిగిలినది',
+    excessAmount: 'అదనపు మొత్తం',
+    expandFamilyMembers: 'సభ్యులను చూపించు',
+    collapseFamilyMembers: 'సభ్యులను దాచు',
+    familyContribution: 'కుటుంబ వాటా',
+    memberPortion: 'సభ్యుని వాటా',
+    includedInSplit: 'చేర్చబడింది',
+    excludedFromSplit: 'మినహాయించబడింది (₹0)',
+    perfectReconciliation: 'సరిగ్గా సరిపోయింది: మొత్తం బిల్లుతో సరిపోలింది',
     percentageSplit: 'శాతం వారీగా',
     familyWiseSplit: 'కుటుంబాల వారీగా',
     mixedSplit: 'మిశ్రమ (కుటుంబం + వ్యక్తులు)',
