@@ -9,6 +9,7 @@ import { RepaymentModal } from './RepaymentModal';
 import { TripMap } from './TripMap';
 import { ReportsView } from './ReportsView';
 import { TripEditModal } from './TripEditModal';
+import { ClearTripModal } from './ClearTripModal';
 import {
   Receipt,
   Users,
@@ -73,6 +74,7 @@ export const TripDetail: React.FC<Props> = ({
   const [editingExpense, setEditingExpense] = useState<any | null>(null);
   const [showRepaymentModal, setShowRepaymentModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showClearModal, setShowClearModal] = useState(false);
   const [repaymentPrefill, setRepaymentPrefill] = useState<any>(null);
 
   // Cover image modal state
@@ -272,6 +274,17 @@ export const TripDetail: React.FC<Props> = ({
           {isCreatorOrAdmin && trip.status !== 'completed' && (
             <button type="button" onClick={handleMarkCompleted} className="btn btn-secondary btn-sm">
               <CheckCircle2 size={16} /> {t.markCompleted}
+            </button>
+          )}
+          {currentUser?.role === 'super_admin' && (
+            <button
+              type="button"
+              onClick={() => setShowClearModal(true)}
+              className="btn btn-danger btn-sm"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+              title={t.clearTripForAllUsers}
+            >
+              <Trash2 size={15} /> {t.clearTripBtn}
             </button>
           )}
           <button type="button" onClick={() => { setEditingExpense(null); setShowSplitWizard(true); }} className="btn btn-primary btn-sm">
@@ -1235,6 +1248,24 @@ export const TripDetail: React.FC<Props> = ({
           onTripUpdated={() => {
             setShowEditModal(false);
             loadAllTripData();
+          }}
+        />
+      )}
+
+      {/* Clear Trip for All Users Modal (Super Admin Only) */}
+      {showClearModal && trip && (
+        <ClearTripModal
+          trip={{
+            id: trip.id,
+            name: trip.name,
+            destination: trip.destination,
+            participant_count: trip.participants?.length,
+            expense_count: expenses?.length,
+          }}
+          onClose={() => setShowClearModal(false)}
+          onTripCleared={() => {
+            setShowClearModal(false);
+            onBack();
           }}
         />
       )}

@@ -170,6 +170,14 @@ export interface Translations {
   tripManagement: string;
   expenseManagement: string;
   recentActivity: string;
+  clearTripForAllUsers: string;
+  clearTripWarning: string;
+  clearTripConfirmStep1: string;
+  clearTripConfirmStep2: string;
+  clearTripTypeToConfirm: string;
+  clearTripSuccess: string;
+  clearTripBtn: string;
+  clearingTrip: string;
   totalRegisteredUsers: string;
   activeMemberships: string;
   outstandingBalances: string;
@@ -584,6 +592,14 @@ export const translations: Record<Language, Translations> = {
     tripManagement: 'All Trips',
     expenseManagement: 'Expenses & Settlements',
     recentActivity: 'Recent System Activity',
+    clearTripForAllUsers: 'Clear Trip for All Users',
+    clearTripWarning: 'Warning: This will permanently delete this trip and all its expenses, allocations, attendance, and itinerary data for every user across all families. This action cannot be undone.',
+    clearTripConfirmStep1: 'This action permanently removes the trip from the PostgreSQL database for all participants.',
+    clearTripConfirmStep2: 'Final Confirmation: Type DELETE or the exact trip name below to proceed.',
+    clearTripTypeToConfirm: 'Type to confirm',
+    clearTripSuccess: 'Trip permanently cleared for all users.',
+    clearTripBtn: 'Clear Trip for All Users',
+    clearingTrip: 'Clearing Trip for All Users...',
     totalRegisteredUsers: 'Total Registered Users',
     activeMemberships: 'Active Memberships',
     outstandingBalances: 'Outstanding Balances',
@@ -996,6 +1012,14 @@ export const translations: Record<Language, Translations> = {
     tripManagement: 'అన్ని యాత్రలు',
     expenseManagement: 'ఖర్చులు & సెటిల్‌మెంట్లు',
     recentActivity: 'ఇటీవలి సిస్టమ్ కార్యకలాపాలు',
+    clearTripForAllUsers: 'అందరి యూజర్ల కోసం యాత్రను తొలగించండి',
+    clearTripWarning: 'హెచ్చరిక: ఇది అన్ని కుటుంబాల వినియోగదారుల కోసం ఈ యాత్రను మరియు దాని ఖర్చులు, హాజరు మరియు మార్గ సమాచారాన్ని శాశ్వతంగా తొలగిస్తుంది. ఈ చర్యను వెనక్కి తీసుకోలేరు.',
+    clearTripConfirmStep1: 'ఈ చర్య పాల్గొన్న అందరి యూజర్ల కోసం డేటాబేస్ నుండి ఈ యాత్రను శాశ్వతంగా తొలగిస్తుంది.',
+    clearTripConfirmStep2: 'తుది నిర్ధారణ: ముందుకు సాగడానికి క్రింద DELETE లేదా యాత్ర పేరును టైప్ చేయండి.',
+    clearTripTypeToConfirm: 'నిర్ధారించడానికి టైప్ చేయండి',
+    clearTripSuccess: 'అందరి యూజర్ల కోసం యాత్ర విజయవంతంగా తొలగించబడింది.',
+    clearTripBtn: 'అందరి యూజర్ల కోసం యాత్రను తొలగించండి',
+    clearingTrip: 'యాత్రను తొలగిస్తోంది...',
     totalRegisteredUsers: 'మొత్తం నమోదైన ఖాతాలు',
     activeMemberships: 'క్రియాశీల సభ్యత్వాలు',
     outstandingBalances: 'చెల్లించాల్సిన మొత్తం బాకీలు',

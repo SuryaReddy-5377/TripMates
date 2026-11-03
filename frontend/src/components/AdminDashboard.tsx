@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useI18n } from '../i18n/context';
 import { api } from '../api/client';
+import { ClearTripModal, TripToClear } from './ClearTripModal';
 import {
   LayoutDashboard,
   Users,
@@ -88,6 +89,8 @@ export const AdminDashboard: React.FC<Props> = ({ onExitAdmin, onSelectTrip, onL
   const [tripSearch, setTripSearch] = useState('');
   const [tripStatusFilter, setTripStatusFilter] = useState('');
   const [selectedTripDetails, setSelectedTripDetails] = useState<any | null>(null);
+  const [tripToClear, setTripToClear] = useState<TripToClear | null>(null);
+  const [adminTripToast, setAdminTripToast] = useState<string | null>(null);
 
   // Expenses state
   const [expenses, setExpenses] = useState<any[]>([]);
@@ -1307,7 +1310,7 @@ export const AdminDashboard: React.FC<Props> = ({ onExitAdmin, onSelectTrip, onL
                 </button>
 
                 {/* Trip Header Banner */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginBottom: '0.35rem' }}>
                       <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.75rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
@@ -1333,6 +1336,17 @@ export const AdminDashboard: React.FC<Props> = ({ onExitAdmin, onSelectTrip, onL
                       {selectedTripDetails.trip.creator_email}
                     </div>
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setTripToClear(selectedTripDetails.trip)}
+                    className="btn btn-danger btn-sm"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', padding: '0.5rem 0.95rem' }}
+                    title="Permanently remove this trip for all users"
+                  >
+                    <Trash2 size={15} />
+                    <span>{t.clearTripBtn}</span>
+                  </button>
                 </div>
 
                 {/* Participants & Attendance */}
@@ -1595,22 +1609,45 @@ export const AdminDashboard: React.FC<Props> = ({ onExitAdmin, onSelectTrip, onL
                             {formatINR(tr.total_spent_paise)}
                           </td>
                           <td style={{ padding: '0.85rem 1.15rem', textAlign: 'right' }}>
-                            <button
-                              type="button"
-                              onClick={() => loadTripInspector(tr.id)}
-                              style={{
-                                background: '#0f172a',
-                                color: '#ffffff',
-                                border: 'none',
-                                borderRadius: '6px',
-                                padding: '0.35rem 0.75rem',
-                                fontSize: '0.78rem',
-                                fontWeight: 700,
-                                cursor: 'pointer',
-                              }}
-                            >
-                              Inspect Trip
-                            </button>
+                            <div style={{ display: 'flex', gap: '0.45rem', justifyContent: 'flex-end', alignItems: 'center' }}>
+                              <button
+                                type="button"
+                                onClick={() => loadTripInspector(tr.id)}
+                                style={{
+                                  background: '#0f172a',
+                                  color: '#ffffff',
+                                  border: 'none',
+                                  borderRadius: '6px',
+                                  padding: '0.35rem 0.75rem',
+                                  fontSize: '0.78rem',
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                Inspect Trip
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setTripToClear(tr)}
+                                style={{
+                                  background: '#fef2f2',
+                                  color: '#dc2626',
+                                  border: '1px solid #fecaca',
+                                  borderRadius: '6px',
+                                  padding: '0.35rem 0.65rem',
+                                  fontSize: '0.78rem',
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.25rem',
+                                }}
+                                title="Clear Trip for All Users"
+                              >
+                                <Trash2 size={13} />
+                                <span>Clear Trip</span>
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -2807,6 +2844,45 @@ export const AdminDashboard: React.FC<Props> = ({ onExitAdmin, onSelectTrip, onL
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Clear Trip for All Users Modal */}
+      {tripToClear && (
+        <ClearTripModal
+          trip={tripToClear}
+          onClose={() => setTripToClear(null)}
+          onTripCleared={() => {
+            const clearedName = tripToClear.name;
+            setTripToClear(null);
+            setSelectedTripDetails(null);
+            loadTrips();
+            setAdminTripToast(`Trip "${clearedName}" has been permanently removed for all users.`);
+            setTimeout(() => setAdminTripToast(null), 5000);
+          }}
+        />
+      )}
+
+      {/* Admin Trip Action Toast */}
+      {adminTripToast && (
+        <div style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '24px',
+          background: '#0f172a',
+          color: '#ffffff',
+          padding: '0.85rem 1.25rem',
+          borderRadius: '12px',
+          boxShadow: '0 10px 25px rgba(0,0,0,0.25)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.65rem',
+          zIndex: 2000,
+          fontSize: '0.88rem',
+          fontWeight: 600,
+        }}>
+          <CheckCircle size={18} style={{ color: '#10b981' }} />
+          <span>{adminTripToast}</span>
         </div>
       )}
     </div>

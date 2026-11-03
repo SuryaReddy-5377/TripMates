@@ -705,6 +705,118 @@ adminRouter.get('/trips/:id', async (req: Request, res: Response) => {
   });
 });
 
+// Clear Trip for All Users - Permanent administrative deletion across the platform
+const clearTripHandler = async (req: Request, res: Response) => {
+  const tripId = Number(req.params.id);
+  if (!tripId || isNaN(tripId)) {
+    res.status(400).json({ error: 'INVALID_ID', message: 'Invalid trip ID' });
+    return;
+  }
+
+  const trip = (await req.db.prepare(`
+    SELECT t.*, u.email as creator_email,
+           (SELECT count(*) FROM trip_participants tp WHERE tp.trip_id = t.id) as participant_count,
+           (SELECT count(*) FROM expenses e WHERE e.trip_id = t.id) as expense_count,
+           (SELECT coalesce(sum(total_paise), 0) FROM expenses e WHERE e.trip_id = t.id AND e.voided_at IS NULL) as total_spent_paise
+    FROM trips t
+    LEFT JOIN users u ON t.created_by = u.id
+    WHERE t.id = ?
+  `).get(tripId)) as any;
+
+  if (!trip) {
+    res.status(404).json({ error: 'NOT_FOUND', message: 'Trip not found' });
+    return;
+  }
+
+  try {
+    await withTransaction(req.db, async () => {
+      // 1. Delete notifications related to this trip, or expenses/repayments of this trip
+      await req.db.prepare(`
+        DELETE FROM notifications 
+        WHERE trip_id = ? 
+           OR expense_id IN (SELECT id FROM expenses WHERE trip_id = ?)
+           OR repayment_id IN (SELECT id FROM repayments WHERE trip_id = ?)
+      `).run(tripId, tripId, tripId);
+
+      // 2. Delete family share breakdowns for all expenses of this trip
+      await req.db.prepare(`
+        DELETE FROM family_share_breakdown 
+        WHERE expense_id IN (SELECT id FROM expenses WHERE trip_id = ?)
+      `).run(tripId);
+
+      // 3. Delete expense allocations for all expenses of this trip
+      await req.db.prepare(`
+        DELETE FROM expense_allocations 
+        WHERE expense_id IN (SELECT id FROM expenses WHERE trip_id = ?)
+      `).run(tripId);
+
+      // 4. Delete expense charges for all expenses of this trip
+      await req.db.prepare(`
+        DELETE FROM expense_charges 
+        WHERE expense_id IN (SELECT id FROM expenses WHERE trip_id = ?)
+      `).run(tripId);
+
+      // 5. Delete expense items for all expenses of this trip
+      await req.db.prepare(`
+        DELETE FROM expense_items 
+        WHERE expense_id IN (SELECT id FROM expenses WHERE trip_id = ?)
+      `).run(tripId);
+
+      // 6. Delete all expenses of this trip
+      await req.db.prepare('DELETE FROM expenses WHERE trip_id = ?').run(tripId);
+
+      // 7. Delete all repayments of this trip
+      await req.db.prepare('DELETE FROM repayments WHERE trip_id = ?').run(tripId);
+
+      // 8. Delete all debt assumptions of this trip
+      await req.db.prepare('DELETE FROM debt_assumptions WHERE trip_id = ?').run(tripId);
+
+      // 9. Delete all trip visiting places / itinerary waypoints
+      await req.db.prepare('DELETE FROM trip_places WHERE trip_id = ?').run(tripId);
+
+      // 10. Delete all invitations for this trip
+      await req.db.prepare('DELETE FROM invitations WHERE trip_id = ?').run(tripId);
+
+      // 11. Delete attendance log for this trip
+      await req.db.prepare('DELETE FROM attendance_log WHERE trip_id = ?').run(tripId);
+
+      // 12. Delete trip participants
+      await req.db.prepare('DELETE FROM trip_participants WHERE trip_id = ?').run(tripId);
+
+      // 13. Delete trip families association
+      await req.db.prepare('DELETE FROM trip_families WHERE trip_id = ?').run(tripId);
+
+      // 14. Finally, delete the trip itself
+      await req.db.prepare('DELETE FROM trips WHERE id = ?').run(tripId);
+
+      // 15. Record in Admin Audit Log
+      recordAuditLog(req.db, req.user!.id, 'CLEAR_TRIP_FOR_ALL_USERS', 'trips', tripId, {
+        name: trip.name,
+        destination: trip.destination,
+        creator_email: trip.creator_email,
+        participant_count: trip.participant_count,
+        expense_count: trip.expense_count,
+        total_spent_paise: trip.total_spent_paise,
+      }, {
+        deleted_by_admin: req.user!.email,
+        deleted_at: new Date().toISOString(),
+      });
+    });
+
+    res.json({
+      success: true,
+      message: `Trip "${trip.name}" and all associated data have been permanently deleted for all users.`,
+      tripId,
+      deletedTripName: trip.name,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'FAILED_TO_DELETE_TRIP', message: err.message || 'Failed to delete trip' });
+  }
+};
+
+adminRouter.delete('/trips/:id', clearTripHandler);
+adminRouter.post('/trips/:id/clear', clearTripHandler);
+
 // ----------------------------------------------------------------------------
 // E. EXPENSE AND SETTLEMENT MANAGEMENT (FEATURE 6.E)
 // ----------------------------------------------------------------------------
