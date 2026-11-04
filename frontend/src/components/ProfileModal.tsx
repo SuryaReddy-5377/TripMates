@@ -34,6 +34,16 @@ export const ProfileModal: React.FC<Props> = ({ onClose, onProfileUpdated }) => 
   const [familyNameInput, setFamilyNameInput] = useState('');
   const [savingFamily, setSavingFamily] = useState(false);
 
+  // Edit My Name state
+  const [isEditingMyName, setIsEditingMyName] = useState(false);
+  const [myDisplayNameInput, setMyDisplayNameInput] = useState('');
+  const [savingMyName, setSavingMyName] = useState(false);
+
+  // Edit Family Member Name state
+  const [editingMemberId, setEditingMemberId] = useState<number | null>(null);
+  const [editingMemberNameInput, setEditingMemberNameInput] = useState('');
+  const [savingMemberName, setSavingMemberName] = useState(false);
+
   // Add Member state
   const [showAddMember, setShowAddMember] = useState(false);
   const [memberName, setMemberName] = useState('');
@@ -47,6 +57,9 @@ export const ProfileModal: React.FC<Props> = ({ onClose, onProfileUpdated }) => 
       setErrorMsg(null);
       const data = await api.get('/auth/profile');
       setProfile(data);
+      if (data.person?.display_name) {
+        setMyDisplayNameInput(data.person.display_name);
+      }
       if (data.family) {
         setFamilyNameInput(data.family.name);
       }
@@ -60,6 +73,45 @@ export const ProfileModal: React.FC<Props> = ({ onClose, onProfileUpdated }) => 
   useEffect(() => {
     loadProfile();
   }, []);
+
+  const handleSaveMyName = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!myDisplayNameInput.trim()) return;
+
+    try {
+      setSavingMyName(true);
+      setErrorMsg(null);
+      await api.put('/auth/profile/name', { display_name: myDisplayNameInput.trim() });
+      setSuccessMsg('Your name has been updated successfully!');
+      setIsEditingMyName(false);
+      await loadProfile();
+      onProfileUpdated();
+      setTimeout(() => setSuccessMsg(null), 3500);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to update name');
+    } finally {
+      setSavingMyName(false);
+    }
+  };
+
+  const handleSaveMemberName = async (personId: number) => {
+    if (!editingMemberNameInput.trim()) return;
+
+    try {
+      setSavingMemberName(true);
+      setErrorMsg(null);
+      await api.put(`/auth/profile/family/members/${personId}/name`, { display_name: editingMemberNameInput.trim() });
+      setSuccessMsg('Member name updated successfully!');
+      setEditingMemberId(null);
+      await loadProfile();
+      onProfileUpdated();
+      setTimeout(() => setSuccessMsg(null), 3500);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to update member name');
+    } finally {
+      setSavingMemberName(false);
+    }
+  };
 
   const handleSaveFamilyName = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -206,21 +258,70 @@ export const ProfileModal: React.FC<Props> = ({ onClose, onProfileUpdated }) => 
                   fontSize: '1.2rem',
                   fontWeight: 800,
                   fontFamily: 'var(--font-display)',
+                  flexShrink: 0,
                 }}>
                   {profile.person?.display_name?.slice(0, 2).toUpperCase() || profile.user.email.slice(0, 2).toUpperCase()}
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
-                      {profile.person?.display_name || profile.user.email}
-                    </h3>
-                    <span className="badge badge-amber" style={{ fontSize: '0.7rem' }}>
-                      {profile.user.role.replace('_', ' ').toUpperCase()}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '0.2rem' }}>
-                    {profile.user.email}
-                  </div>
+                  {!isEditingMyName ? (
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
+                            {profile.person?.display_name || profile.user.email}
+                          </h3>
+                          <span className="badge badge-amber" style={{ fontSize: '0.7rem' }}>
+                            {profile.user.role.replace('_', ' ').toUpperCase()}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsEditingMyName(true);
+                            setMyDisplayNameInput(profile.person?.display_name || '');
+                          }}
+                          className="btn btn-secondary btn-sm"
+                          style={{ fontSize: '0.75rem', padding: '0.3rem 0.65rem', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
+                        >
+                          <Edit2 size={12} /> {t.rename || 'Edit Name'}
+                        </button>
+                      </div>
+                      <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '0.2rem' }}>
+                        {profile.user.email}
+                      </div>
+                    </div>
+                  ) : (
+                    <form onSubmit={handleSaveMyName} style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                      <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <input
+                          type="text"
+                          className="form-input"
+                          value={myDisplayNameInput}
+                          onChange={e => setMyDisplayNameInput(e.target.value)}
+                          placeholder={t.fullName || 'Enter your name'}
+                          style={{ padding: '0.4rem 0.65rem', fontSize: '0.9rem', borderRadius: '8px', minWidth: '180px', flex: 1 }}
+                          autoFocus
+                          required
+                        />
+                        <button
+                          type="submit"
+                          disabled={savingMyName}
+                          className="btn btn-primary btn-sm"
+                          style={{ padding: '0.4rem 0.75rem', fontSize: '0.78rem' }}
+                        >
+                          {savingMyName ? t.loading : (t.save || 'Save')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsEditingMyName(false)}
+                          className="btn btn-secondary btn-sm"
+                          style={{ padding: '0.4rem 0.65rem', fontSize: '0.78rem' }}
+                        >
+                          {t.cancel || 'Cancel'}
+                        </button>
+                      </div>
+                    </form>
+                  )}
                 </div>
               </div>
             </div>
@@ -281,47 +382,101 @@ export const ProfileModal: React.FC<Props> = ({ onClose, onProfileUpdated }) => 
                       border: m.is_current_user ? '1px solid #bbf7d0' : '1px solid #e2e8f0',
                       padding: '0.65rem 0.85rem',
                       borderRadius: '10px',
+                      gap: '0.5rem',
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-                      <div style={{
-                        width: '32px',
-                        height: '32px',
-                        borderRadius: '50%',
-                        background: m.is_current_user ? '#15803d' : '#e2e8f0',
-                        color: m.is_current_user ? '#ffffff' : '#334155',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '0.75rem',
-                        fontWeight: 700,
-                      }}>
-                        {m.display_name.slice(0, 2).toUpperCase()}
-                      </div>
-                      <div>
-                        <div style={{ fontSize: '0.88rem', fontWeight: 600, color: '#0f172a' }}>
-                          {m.display_name} {m.is_current_user && <span style={{ fontSize: '0.72rem', color: '#15803d', fontWeight: 700 }}>({t.you})</span>}
-                        </div>
-                        {m.email && <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{m.email}</div>}
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      {m.is_family_admin === 1 && (
-                        <span className="badge badge-amber" style={{ fontSize: '0.68rem' }}>{t.adminBadge}</span>
-                      )}
-                      {!m.is_current_user && (
+                    {editingMemberId === m.id ? (
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          handleSaveMemberName(m.id);
+                        }}
+                        style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', width: '100%' }}
+                      >
+                        <input
+                          type="text"
+                          className="form-input"
+                          value={editingMemberNameInput}
+                          onChange={e => setEditingMemberNameInput(e.target.value)}
+                          placeholder="Member name"
+                          style={{ padding: '0.35rem 0.55rem', fontSize: '0.85rem', borderRadius: '6px', flex: 1 }}
+                          autoFocus
+                          required
+                        />
+                        <button
+                          type="submit"
+                          disabled={savingMemberName}
+                          className="btn btn-primary btn-sm"
+                          style={{ padding: '0.35rem 0.6rem', fontSize: '0.75rem' }}
+                        >
+                          {savingMemberName ? t.loading : (t.save || 'Save')}
+                        </button>
                         <button
                           type="button"
-                          onClick={() => handleRemoveMember(m.id, m.display_name)}
-                          className="btn btn-danger btn-sm"
-                          style={{ padding: '0.25rem 0.45rem', fontSize: '0.7rem' }}
-                          title={t.delete}
+                          onClick={() => setEditingMemberId(null)}
+                          className="btn btn-secondary btn-sm"
+                          style={{ padding: '0.35rem 0.55rem', fontSize: '0.75rem' }}
                         >
-                          <Trash2 size={13} />
+                          {t.cancel || 'Cancel'}
                         </button>
-                      )}
-                    </div>
+                      </form>
+                    ) : (
+                      <>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                          <div style={{
+                            width: '32px',
+                            height: '32px',
+                            borderRadius: '50%',
+                            background: m.is_current_user ? '#15803d' : '#e2e8f0',
+                            color: m.is_current_user ? '#ffffff' : '#334155',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            flexShrink: 0,
+                          }}>
+                            {m.display_name.slice(0, 2).toUpperCase()}
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '0.88rem', fontWeight: 600, color: '#0f172a' }}>
+                              {m.display_name} {m.is_current_user && <span style={{ fontSize: '0.72rem', color: '#15803d', fontWeight: 700 }}>({t.you})</span>}
+                            </div>
+                            {m.email && <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{m.email}</div>}
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0 }}>
+                          {m.is_family_admin === 1 && (
+                            <span className="badge badge-amber" style={{ fontSize: '0.68rem' }}>{t.adminBadge}</span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingMemberId(m.id);
+                              setEditingMemberNameInput(m.display_name);
+                            }}
+                            className="btn btn-secondary btn-sm"
+                            style={{ padding: '0.25rem 0.5rem', fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
+                            title={t.rename || 'Edit name'}
+                          >
+                            <Edit2 size={11} />
+                            <span>{t.edit || 'Edit'}</span>
+                          </button>
+                          {!m.is_current_user && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveMember(m.id, m.display_name)}
+                              className="btn btn-danger btn-sm"
+                              style={{ padding: '0.25rem 0.45rem', fontSize: '0.7rem' }}
+                              title={t.delete}
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          )}
+                        </div>
+                      </>
+                    )}
                   </div>
                 ))}
               </div>

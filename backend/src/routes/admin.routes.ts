@@ -445,6 +445,82 @@ adminRouter.patch('/members/:userId/status', async (req: Request, res: Response)
   });
 });
 
+// Super Admin update member display name by User ID
+const adminUpdateMemberNameHandler = async (req: Request, res: Response) => {
+  const targetUserId = Number(req.params.userId);
+  const { display_name } = req.body;
+
+  if (!display_name || typeof display_name !== 'string' || display_name.trim().length < 1) {
+    res.status(400).json({ error: 'INVALID_NAME', message: 'Display name must be at least 1 character long' });
+    return;
+  }
+
+  const trimmedName = display_name.trim();
+
+  const targetUser = (await req.db.prepare('SELECT id, email, role FROM users WHERE id = ?').get(targetUserId)) as any;
+  if (!targetUser) {
+    res.status(404).json({ error: 'NOT_FOUND', message: 'User not found' });
+    return;
+  }
+
+  try {
+    const result = await withTransaction(req.db, async () => {
+      const personRow = (await req.db.prepare('SELECT id, display_name FROM persons WHERE user_id = ?').get(targetUserId)) as any;
+      let personId: number;
+      let oldName = '';
+
+      if (personRow) {
+        personId = personRow.id;
+        oldName = personRow.display_name;
+        await req.db.prepare('UPDATE persons SET display_name = ? WHERE id = ?').run(trimmedName, personId);
+      } else {
+        const pRes = await req.db.prepare('INSERT INTO persons (display_name, user_id, is_active) VALUES (?, ?, 1)').run(trimmedName, targetUserId);
+        personId = Number(pRes.lastInsertRowid);
+      }
+
+      await recordAuditLog(req.db, req.user!.id, 'ADMIN_UPDATE_USER_NAME', 'persons', personId, { display_name: oldName }, { display_name: trimmedName });
+      return { userId: targetUserId, personId, display_name: trimmedName };
+    });
+
+    res.json({ message: 'Member name updated successfully', ...result });
+  } catch (err: any) {
+    res.status(500).json({ error: 'ADMIN_UPDATE_NAME_FAILED', message: err.message });
+  }
+};
+
+adminRouter.patch('/members/:userId/name', adminUpdateMemberNameHandler);
+adminRouter.put('/members/:userId/name', adminUpdateMemberNameHandler);
+
+// Super Admin update any person display name by Person ID
+const adminUpdatePersonNameHandler = async (req: Request, res: Response) => {
+  const targetPersonId = Number(req.params.personId);
+  const { display_name } = req.body;
+
+  if (!display_name || typeof display_name !== 'string' || display_name.trim().length < 1) {
+    res.status(400).json({ error: 'INVALID_NAME', message: 'Display name must be at least 1 character long' });
+    return;
+  }
+
+  const trimmedName = display_name.trim();
+
+  const person = (await req.db.prepare('SELECT id, display_name FROM persons WHERE id = ?').get(targetPersonId)) as any;
+  if (!person) {
+    res.status(404).json({ error: 'NOT_FOUND', message: 'Person not found' });
+    return;
+  }
+
+  try {
+    await req.db.prepare('UPDATE persons SET display_name = ? WHERE id = ?').run(trimmedName, targetPersonId);
+    await recordAuditLog(req.db, req.user!.id, 'ADMIN_UPDATE_PERSON_NAME', 'persons', targetPersonId, { display_name: person.display_name }, { display_name: trimmedName });
+    res.json({ message: 'Person name updated successfully', personId: targetPersonId, display_name: trimmedName });
+  } catch (err: any) {
+    res.status(500).json({ error: 'ADMIN_UPDATE_PERSON_NAME_FAILED', message: err.message });
+  }
+};
+
+adminRouter.patch('/persons/:personId/name', adminUpdatePersonNameHandler);
+adminRouter.put('/persons/:personId/name', adminUpdatePersonNameHandler);
+
 // Remove or deactivate user account safely without damaging financial history
 adminRouter.delete('/members/:userId', async (req: Request, res: Response) => {
   const targetUserId = Number(req.params.userId);

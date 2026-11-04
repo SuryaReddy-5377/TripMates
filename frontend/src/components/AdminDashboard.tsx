@@ -67,6 +67,21 @@ export const AdminDashboard: React.FC<Props> = ({ onExitAdmin, onSelectTrip, onL
   const [selectedMember, setSelectedMember] = useState<any | null>(null);
   const [confirmStatusModal, setConfirmStatusModal] = useState<{ isOpen: boolean; user?: any; newStatus?: number }>({ isOpen: false });
 
+  // Admin edit member name state
+  const [adminEditNameModal, setAdminEditNameModal] = useState<{
+    isOpen: boolean;
+    userId?: number;
+    personId?: number;
+    currentName: string;
+    email?: string;
+  }>({
+    isOpen: false,
+    currentName: '',
+  });
+  const [adminEditNameInput, setAdminEditNameInput] = useState('');
+  const [adminEditNameSaving, setAdminEditNameSaving] = useState(false);
+  const [adminEditNameError, setAdminEditNameError] = useState<string | null>(null);
+
   // Remove user state
   const [removeUserModal, setRemoveUserModal] = useState<{ isOpen: boolean; user?: any }>({ isOpen: false });
   const [removeUserResult, setRemoveUserResult] = useState<string | null>(null);
@@ -377,6 +392,37 @@ export const AdminDashboard: React.FC<Props> = ({ onExitAdmin, onSelectTrip, onL
       loadMembers();
     } catch (err: any) {
       alert(err.message || 'Failed to update user status');
+    }
+  };
+
+  // Save edited member name by Admin
+  const handleSaveAdminEditName = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!adminEditNameInput.trim()) return;
+
+    try {
+      setAdminEditNameSaving(true);
+      setAdminEditNameError(null);
+
+      if (adminEditNameModal.userId) {
+        await api.patch(`/admin/members/${adminEditNameModal.userId}/name`, {
+          display_name: adminEditNameInput.trim(),
+        });
+      } else if (adminEditNameModal.personId) {
+        await api.patch(`/admin/persons/${adminEditNameModal.personId}/name`, {
+          display_name: adminEditNameInput.trim(),
+        });
+      }
+
+      setAdminEditNameModal({ isOpen: false, currentName: '' });
+      loadMembers();
+      if (selectedFamily) {
+        loadFamilyDetails(selectedFamily.id);
+      }
+    } catch (err: any) {
+      setAdminEditNameError(err.message || 'Failed to update member name');
+    } finally {
+      setAdminEditNameSaving(false);
     }
   };
 
@@ -744,6 +790,7 @@ export const AdminDashboard: React.FC<Props> = ({ onExitAdmin, onSelectTrip, onL
                         <th style={{ padding: '0.75rem 1rem' }}>Role</th>
                         <th style={{ padding: '0.75rem 1rem' }}>Status</th>
                         <th style={{ padding: '0.75rem 1rem' }}>Joined On</th>
+                        <th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -768,6 +815,37 @@ export const AdminDashboard: React.FC<Props> = ({ onExitAdmin, onSelectTrip, onL
                           </td>
                           <td style={{ padding: '0.75rem 1rem', color: '#94a3b8' }}>
                             {new Date(m.joined_at).toLocaleDateString('en-IN')}
+                          </td>
+                          <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAdminEditNameModal({
+                                  isOpen: true,
+                                  personId: m.person_id || m.id,
+                                  userId: m.user_id,
+                                  currentName: m.display_name || '',
+                                  email: m.email,
+                                });
+                                setAdminEditNameInput(m.display_name || '');
+                                setAdminEditNameError(null);
+                              }}
+                              style={{
+                                background: '#f8fafc',
+                                border: '1px solid #cbd5e1',
+                                color: '#0f172a',
+                                borderRadius: '6px',
+                                padding: '0.25rem 0.55rem',
+                                fontSize: '0.75rem',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.25rem',
+                              }}
+                            >
+                              <Edit2 size={11} /> Edit Name
+                            </button>
                           </td>
                         </tr>
                       ))}

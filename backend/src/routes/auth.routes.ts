@@ -605,6 +605,100 @@ authRouter.get('/profile', requireAuth, async (req: Request, res: Response) => {
   });
 });
 
+// PUT /api/auth/profile/name & POST /api/auth/profile/name - Update logged-in user's display name
+const updateProfileNameHandler = async (req: Request, res: Response) => {
+  const { display_name } = req.body;
+  if (!display_name || typeof display_name !== 'string' || display_name.trim().length < 1) {
+    res.status(400).json({ error: 'INVALID_NAME', message: 'Display name must be at least 1 character long' });
+    return;
+  }
+
+  const trimmedName = display_name.trim();
+  const userId = req.user!.id;
+
+  try {
+    const updatedPerson = await withTransaction(req.db, async () => {
+      let person = req.person;
+      let oldName = '';
+      if (person) {
+        oldName = person.display_name;
+        await req.db.prepare('UPDATE persons SET display_name = ? WHERE id = ?').run(trimmedName, person.id);
+        person.display_name = trimmedName;
+      } else {
+        const pRes = await req.db.prepare(`
+          INSERT INTO persons (display_name, user_id, is_active)
+          VALUES (?, ?, 1)
+        `).run(trimmedName, userId);
+        person = {
+          id: Number(pRes.lastInsertRowid),
+          display_name: trimmedName,
+          user_id: userId,
+          is_active: 1,
+        };
+      }
+
+      await recordAuditLog(req.db, userId, 'UPDATE_USER_NAME', 'persons', person.id, { display_name: oldName }, { display_name: trimmedName });
+      return person;
+    });
+
+    res.json({ message: 'Name updated successfully', person: updatedPerson });
+  } catch (err: any) {
+    res.status(500).json({ error: 'NAME_UPDATE_FAILED', message: err.message });
+  }
+};
+
+authRouter.put('/profile/name', requireAuth, updateProfileNameHandler);
+authRouter.post('/profile/name', requireAuth, updateProfileNameHandler);
+authRouter.put('/profile', requireAuth, updateProfileNameHandler);
+
+// PUT & POST /api/auth/profile/family/members/:personId/name - Update family member's display name
+const updateFamilyMemberNameHandler = async (req: Request, res: Response) => {
+  const targetPersonId = Number(req.params.personId);
+  const { display_name } = req.body;
+
+  if (!display_name || typeof display_name !== 'string' || display_name.trim().length < 1) {
+    res.status(400).json({ error: 'INVALID_NAME', message: 'Display name must be at least 1 character long' });
+    return;
+  }
+
+  const trimmedName = display_name.trim();
+  const family = req.family;
+
+  if (!family && req.user!.role !== 'super_admin') {
+    res.status(400).json({ error: 'NO_FAMILY', message: 'You do not belong to a family' });
+    return;
+  }
+
+  if (req.user!.role !== 'super_admin') {
+    const membership = await req.db.prepare(`
+      SELECT id FROM family_memberships
+      WHERE family_id = ? AND person_id = ? AND left_at IS NULL
+    `).get(family!.id, targetPersonId);
+
+    if (!membership) {
+      res.status(404).json({ error: 'NOT_FOUND', message: 'Member not found in your family' });
+      return;
+    }
+  }
+
+  const existingPerson = (await req.db.prepare('SELECT id, display_name FROM persons WHERE id = ?').get(targetPersonId)) as any;
+  if (!existingPerson) {
+    res.status(404).json({ error: 'NOT_FOUND', message: 'Person not found' });
+    return;
+  }
+
+  try {
+    await req.db.prepare('UPDATE persons SET display_name = ? WHERE id = ?').run(trimmedName, targetPersonId);
+    await recordAuditLog(req.db, req.user!.id, 'UPDATE_FAMILY_MEMBER_NAME', 'persons', targetPersonId, { display_name: existingPerson.display_name }, { display_name: trimmedName });
+    res.json({ message: 'Member name updated successfully', personId: targetPersonId, display_name: trimmedName });
+  } catch (err: any) {
+    res.status(500).json({ error: 'MEMBER_UPDATE_FAILED', message: err.message });
+  }
+};
+
+authRouter.put('/profile/family/members/:personId/name', requireAuth, updateFamilyMemberNameHandler);
+authRouter.post('/profile/family/members/:personId/name', requireAuth, updateFamilyMemberNameHandler);
+
 // POST /api/auth/profile/family - Create or update family name
 authRouter.post('/profile/family', requireAuth, async (req: Request, res: Response) => {
   const { name } = req.body;
