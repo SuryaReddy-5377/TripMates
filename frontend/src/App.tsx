@@ -126,8 +126,23 @@ export const App: React.FC = () => {
 
   if (loading) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fbfaf7' }}>
-        <div style={{ color: '#0f172a', fontSize: '1.2rem', fontWeight: 700, fontFamily: 'var(--font-display)' }}>{t.loading}</div>
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#fbfaf7', padding: '1.5rem', textAlign: 'center' }}>
+        <div style={{
+          width: '38px',
+          height: '38px',
+          border: '3px solid #e2e8f0',
+          borderTopColor: '#0f172a',
+          borderRadius: '50%',
+          animation: 'spin 0.9s linear infinite',
+          marginBottom: '1rem',
+        }} />
+        <div style={{ color: '#0f172a', fontSize: '1.15rem', fontWeight: 700, fontFamily: 'var(--font-display)', marginBottom: '0.35rem' }}>
+          {t.loading}
+        </div>
+        <p style={{ color: '#64748b', fontSize: '0.85rem', maxWidth: '340px', margin: 0, lineHeight: 1.45 }}>
+          {t.connectingBackend}
+        </p>
+        <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
       </div>
     );
   }

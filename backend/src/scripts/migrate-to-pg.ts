@@ -58,7 +58,7 @@ async function migrate() {
   console.log('--- Step 1: Backing up current SQLite database ---');
   if (fs.existsSync(sqlitePath)) {
     const rawSqlite = new DatabaseSync(sqlitePath);
-    const backupRes = createDatabaseBackup(rawSqlite);
+    const backupRes = await createDatabaseBackup(rawSqlite);
     console.log(`[Backup Success] Created snapshot at: ${backupRes.backupPath}`);
   }
 

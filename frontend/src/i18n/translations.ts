@@ -17,6 +17,7 @@ export interface Translations {
   language: string;
   // Common
   loading: string;
+  connectingBackend: string;
   save: string;
   cancel: string;
   delete: string;
@@ -445,6 +446,7 @@ export const translations: Record<Language, Translations> = {
     setupAdmin: 'Setup Administrator',
     language: 'Language',
     loading: 'Loading...',
+    connectingBackend: 'Connecting to secure server... (Initial wake-up takes ~30-45s after inactivity)',
     save: 'Save',
     cancel: 'Cancel',
     delete: 'Delete',
@@ -865,6 +867,7 @@ export const translations: Record<Language, Translations> = {
     setupAdmin: 'సూపర్ అడ్మిన్ ఏర్పాటు',
     language: 'భాష',
     loading: 'లోడ్ అవుతోంది...',
+    connectingBackend: 'సురక్షిత సర్వర్‌తో కనెక్ట్ అవుతోంది... (మొదటి సారి ప్రారంభం కావడానికి కొద్దిసేపు పడుతుంది)',
     save: 'భద్రపరచు',
     cancel: 'రద్దు',
     delete: 'తొలగించు',

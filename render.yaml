@@ -11,6 +11,8 @@ services:
         value: production
       - key: PORT
         value: 10000
+      - key: DATABASE_URL
+        sync: false
       - key: DATABASE_PATH
         value: data/tripmates.db
       - key: SESSION_SECRET

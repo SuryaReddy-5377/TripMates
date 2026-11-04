@@ -1064,6 +1064,11 @@ export const AuthScreen: React.FC<Props> = ({
                 ? t.registerAndJoinTrip
                 : t.signIn}
             </button>
+            {isSubmitting && (
+              <p style={{ margin: '0.6rem 0 0 0', fontSize: '0.8rem', color: '#64748b', textAlign: 'center' }}>
+                {t.connectingBackend}
+              </p>
+            )}
           </form>
 
           {/* Footer Security Note */}

@@ -25,6 +25,9 @@ import {
 
 export const expensesRouter = Router({ mergeParams: true });
 
+// In-memory cache for duplicate submission prevention (4-second window)
+const recentExpenseSubmissions = new Map<string, number>();
+
 export function keyToAccount(key: string): { type: 'person' | 'family'; id: number } {
   const [prefix, idStr] = key.split(':');
   if (prefix !== 'p' && prefix !== 'f') {
@@ -376,6 +379,20 @@ expensesRouter.post('/', requireAuth, requireTripAccess('tripId'), async (req: R
 
   try {
     const calc = calculateSplitResult(input);
+
+    // Safeguard against accidental duplicate submissions (e.g. rapid double-clicks or mobile network retries)
+    const dedupKey = `${tripId}:${req.user!.id}:${input.title.trim().toLowerCase()}:${calc.totalPaise}:${input.paid_by_id}:${input.expense_date}`;
+    const now = Date.now();
+    const lastSubmitted = recentExpenseSubmissions.get(dedupKey);
+    if (lastSubmitted && now - lastSubmitted < 4000) {
+      res.status(409).json({
+        error: 'DUPLICATE_SUBMISSION',
+        message: 'An identical expense was just submitted. Please wait a moment or refresh to verify before submitting again.',
+      });
+      return;
+    }
+    recentExpenseSubmissions.set(dedupKey, now);
+    setTimeout(() => recentExpenseSubmissions.delete(dedupKey), 10000);
 
     const saved = await withTransaction(req.db, async () => {
       const expRes = await req.db.prepare(`

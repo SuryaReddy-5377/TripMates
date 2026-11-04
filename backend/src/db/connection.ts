@@ -189,6 +189,11 @@ export function getDb(customPath?: string): AnyDb {
         connectionTimeoutMillis: 30000,
       });
 
+      // Handle idle client connection drops gracefully (prevents unhandled process crashes on Neon sleep)
+      globalPool.on('error', (err: Error) => {
+        console.warn('[Database Pool Warning] Idle client connection reset or closed by host (handled):', err.message);
+      });
+
       globalDb = new PostgresAdapter(globalPool);
       console.log(`[Database] Connected to PostgreSQL managed database (Pool size: 10, SSL: ${isNeonOrCloud ? 'enabled' : 'disabled'})`);
     } else {
