@@ -51,7 +51,10 @@ const expenseInputSchema = z.object({
   title: z.string().min(1),
   expense_date: z.string().min(1),
   category: z.string().min(1),
-  paid_by_type: z.enum(['person', 'family']).default('person'),
+  paid_by_type: z.preprocess(
+    (val) => (val === 'p' ? 'person' : val === 'f' ? 'family' : val),
+    z.enum(['person', 'family'])
+  ).default('person'),
   paid_by_id: z.number().int().positive().default(1),
   accounting_mode: z.enum(['individual', 'family', 'mixed']).default('individual'),
   split_method: z.enum(['equal', 'per_head', 'family_wise', 'individual', 'individual_remainder', 'itemized', 'custom', 'percentage']),
@@ -116,7 +119,10 @@ const expensePreviewSchema = expenseInputSchema.extend({
   title: z.string().min(1).default('Preview'),
   expense_date: z.string().min(1).default(() => new Date().toISOString().split('T')[0]),
   category: z.string().min(1).default('general'),
-  paid_by_type: z.enum(['person', 'family']).default('person'),
+  paid_by_type: z.preprocess(
+    (val) => (val === 'p' ? 'person' : val === 'f' ? 'family' : val),
+    z.enum(['person', 'family'])
+  ).default('person'),
   paid_by_id: z.number().int().positive().default(1),
   accounting_mode: z.enum(['individual', 'family', 'mixed']).default('individual'),
 });

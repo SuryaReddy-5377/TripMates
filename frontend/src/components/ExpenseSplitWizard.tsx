@@ -72,7 +72,9 @@ export const ExpenseSplitWizard: React.FC<Props> = ({
     }
     return '';
   });
-  const [payerType, setPayerType] = useState<'person' | 'family'>(expenseToEdit?.paid_by_type || 'person');
+  const [payerType, setPayerType] = useState<'person' | 'family'>(
+    (expenseToEdit?.paid_by_type === 'family' || (expenseToEdit?.paid_by_type as any) === 'f') ? 'family' : 'person'
+  );
   const [payerId, setPayerId] = useState<number>(expenseToEdit?.paid_by_id || participants[0]?.id || 1);
 
   // ONLY TWO MAIN SPLITTING OPTIONS: 'equal' | 'custom'
@@ -157,7 +159,7 @@ export const ExpenseSplitWizard: React.FC<Props> = ({
         setExpenseDate(data.expense_date || '');
         setCategory(data.category || 'Food');
         setTotalRupees((data.total_paise / 100).toString());
-        setPayerType(data.paid_by_type || 'person');
+        setPayerType((data.paid_by_type === 'family' || data.paid_by_type === 'f') ? 'family' : 'person');
         setPayerId(data.paid_by_id || 1);
 
         if (data.split_method === 'family_wise' || data.accounting_mode === 'family') {
@@ -267,7 +269,7 @@ export const ExpenseSplitWizard: React.FC<Props> = ({
         }
 
         const safePayerId = Number(payerId) > 0 ? Number(payerId) : (participants[0]?.id || 1);
-        const safePayerType = payerType || 'person';
+        const safePayerType: 'person' | 'family' = (payerType === 'family' || (payerType as any) === 'f') ? 'family' : 'person';
 
         // 1. Equal Split -> Per Head
         if (mainOption === 'equal' && subOption === 'per_head') {
@@ -568,7 +570,7 @@ export const ExpenseSplitWizard: React.FC<Props> = ({
       setErrorMsg(null);
 
       const safePayerId = Number(payerId) > 0 ? Number(payerId) : (participants[0]?.id || 1);
-      const safePayerType = payerType || 'person';
+      const safePayerType: 'person' | 'family' = (payerType === 'family' || (payerType as any) === 'f') ? 'family' : 'person';
 
       let payload: any = {
         title: title.trim(),
@@ -797,10 +799,10 @@ export const ExpenseSplitWizard: React.FC<Props> = ({
           </label>
           <select
             className="form-select"
-            value={`${payerType}:${payerId}`}
+            value={`${payerType === 'family' || (payerType as any) === 'f' ? 'f' : 'p'}:${payerId}`}
             onChange={e => {
-              const [type, id] = e.target.value.split(':');
-              setPayerType(type as any);
+              const [prefix, id] = e.target.value.split(':');
+              setPayerType(prefix === 'f' ? 'family' : 'person');
               setPayerId(Number(id));
             }}
           >
