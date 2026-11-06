@@ -429,6 +429,7 @@ adminRouter.patch('/members/:userId/status', async (req: Request, res: Response)
 
   await withTransaction(req.db, async () => {
     await req.db.prepare('UPDATE users SET is_active = ? WHERE id = ?').run(activeNum, targetUserId);
+    await req.db.prepare('UPDATE persons SET is_active = ? WHERE user_id = ?').run(activeNum, targetUserId);
 
     // If deactivating, invalidate all active sessions for this user
     if (activeNum === 0) {
@@ -555,6 +556,57 @@ adminRouter.delete('/members/:userId', async (req: Request, res: Response) => {
   const person = (await req.db.prepare('SELECT id, display_name FROM persons WHERE user_id = ?').get(targetUserId)) as { id: number; display_name: string } | undefined;
   const personId = person ? person.id : null;
 
+  const isForce = req.query.force === 'true' || (req.body && req.body.force === true);
+
+  if (isForce) {
+    // Admin requested complete removal: cleanly purge all associated data, person, and user record
+    await withTransaction(req.db, async () => {
+      if (personId) {
+        await req.db.prepare('DELETE FROM debt_assumptions WHERE (debtor_type = ? AND debtor_id = ?) OR (assumed_by_type = ? AND assumed_by_id = ?)').run('person', personId, 'person', personId);
+        await req.db.prepare('DELETE FROM repayments WHERE (from_type = ? AND from_id = ?) OR (to_type = ? AND to_id = ?)').run('person', personId, 'person', personId);
+        await req.db.prepare('DELETE FROM family_share_breakdown WHERE person_id = ?').run(personId);
+        await req.db.prepare('DELETE FROM expense_allocations WHERE account_type = ? AND account_id = ?').run('person', personId);
+
+        // Delete expenses created or paid by this person
+        const expRows = (await req.db.prepare('SELECT id FROM expenses WHERE (paid_by_type = ? AND paid_by_id = ?) OR created_by = ?').all('person', personId, targetUserId)) as any[];
+        for (const exp of expRows) {
+          await req.db.prepare('DELETE FROM expense_items WHERE expense_id = ?').run(exp.id);
+          await req.db.prepare('DELETE FROM expense_charges WHERE expense_id = ?').run(exp.id);
+          await req.db.prepare('DELETE FROM expense_allocations WHERE expense_id = ?').run(exp.id);
+          await req.db.prepare('DELETE FROM family_share_breakdown WHERE expense_id = ?').run(exp.id);
+          await req.db.prepare('DELETE FROM expenses WHERE id = ?').run(exp.id);
+        }
+
+        // Reassign any remaining trips created by targetUserId
+        await req.db.prepare('UPDATE trips SET created_by = NULL WHERE created_by = ?').run(targetUserId);
+
+        await req.db.prepare('DELETE FROM attendance_log WHERE person_id = ?').run(personId);
+        await req.db.prepare('DELETE FROM suggestions WHERE user_id = ?').run(targetUserId);
+        await req.db.prepare('DELETE FROM trip_places WHERE created_by = ?').run(targetUserId);
+        await req.db.prepare('DELETE FROM invitations WHERE person_id = ? OR created_by = ?').run(personId, targetUserId);
+        await req.db.prepare('DELETE FROM trip_participants WHERE person_id = ?').run(personId);
+        await req.db.prepare('DELETE FROM family_memberships WHERE person_id = ?').run(personId);
+        await req.db.prepare('DELETE FROM persons WHERE id = ?').run(personId);
+      }
+
+      await req.db.prepare('DELETE FROM notifications WHERE user_id = ?').run(targetUserId);
+      await req.db.prepare('DELETE FROM notification_preferences WHERE user_id = ?').run(targetUserId);
+      await req.db.prepare('DELETE FROM sessions WHERE user_id = ?').run(targetUserId);
+      await req.db.prepare('DELETE FROM users WHERE id = ?').run(targetUserId);
+
+      await recordAuditLog(req.db, req.user!.id, 'ADMIN_FORCE_DELETE_USER', 'users', targetUserId, {
+        email: targetUser.email,
+      }, null);
+    });
+
+    res.json({
+      action: 'deleted',
+      message: 'User and all associated records have been completely removed from the system.',
+      userId: targetUserId,
+    });
+    return;
+  }
+
   // Check for existing financial records or trip records
   let hasFinancialRecords = false;
   if (personId) {
@@ -574,6 +626,7 @@ adminRouter.delete('/members/:userId', async (req: Request, res: Response) => {
     await withTransaction(req.db, async () => {
       await req.db.prepare('UPDATE users SET is_active = 0 WHERE id = ?').run(targetUserId);
       if (personId) {
+        await req.db.prepare('UPDATE persons SET is_active = 0 WHERE id = ?').run(personId);
         await req.db.prepare(`UPDATE family_memberships SET left_at = datetime('now') WHERE person_id = ? AND left_at IS NULL`).run(personId);
       }
       await revokeAllUserSessions(req.db, targetUserId);
@@ -589,7 +642,7 @@ adminRouter.delete('/members/:userId', async (req: Request, res: Response) => {
 
     res.json({
       action: 'deactivated',
-      message: 'User account has existing financial history. Account has been deactivated and active sessions revoked to preserve historical financial integrity.',
+      message: 'User account has existing financial history. Account has been deactivated and hidden from all invite/trip lists to preserve ledger integrity.',
       userId: targetUserId,
     });
     return;

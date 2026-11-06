@@ -5,6 +5,7 @@ import { createSession, revokeSession } from '../auth/session';
 import { hasSuperAdmin, createInitialSuperAdmin } from '../auth/setup';
 import { requireAuth } from '../auth/middleware';
 import { withTransaction } from '../db/connection';
+import { recordAuditLog } from '../auth/audit';
 
 export const authRouter = Router();
 
@@ -586,7 +587,7 @@ authRouter.get('/profile', requireAuth, async (req: Request, res: Response) => {
       JOIN persons p ON fm.person_id = p.id
       LEFT JOIN users u ON p.user_id = u.id
       JOIN families f ON fm.family_id = f.id
-      WHERE fm.family_id = ? AND fm.left_at IS NULL AND p.is_active = 1
+      WHERE fm.family_id = ? AND fm.left_at IS NULL AND p.is_active = 1 AND (u.id IS NULL OR u.is_active = 1)
       ORDER BY p.id ASC
     `).all(person?.id ?? -1, family.id);
   }

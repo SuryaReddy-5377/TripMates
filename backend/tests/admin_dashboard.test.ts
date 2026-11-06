@@ -571,3 +571,132 @@ test('Trip Invitation & Custom Cover Photo: available persons discovery and cove
   }
 });
 
+test('User and Admin Name Editing, Deactivation exclusion from invites, and Permanent User Removal', async () => {
+  const env = setupAdminTestEnv();
+  const server = env.app.listen(0);
+  const port = (server.address() as any).port;
+  const baseUrl = `http://127.0.0.1:${port}`;
+
+  try {
+    // 1. Member edits their own display name via PUT /api/auth/profile/name
+    const editSelfRes = await fetch(`${baseUrl}/api/auth/profile/name`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${env.memberSession.token}`,
+      },
+      body: JSON.stringify({ display_name: 'Robert Member Updated' }),
+    });
+    assert.equal(editSelfRes.status, 200);
+    const selfData = await editSelfRes.json();
+    assert.equal(selfData.person.display_name, 'Robert Member Updated');
+
+    // Verify profile returns updated name
+    const profileRes = await fetch(`${baseUrl}/api/auth/profile`, {
+      headers: { Authorization: `Bearer ${env.memberSession.token}` },
+    });
+    assert.equal(profileRes.status, 200);
+    const profData = await profileRes.json();
+    assert.equal(profData.person.display_name, 'Robert Member Updated');
+
+    // 2. Family Admin updates a family member's display name via PUT /api/auth/profile/family/members/:personId/name
+    const editMemberRes = await fetch(`${baseUrl}/api/auth/profile/family/members/${env.memberPersonId}/name`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${env.famAdminSession.token}`,
+      },
+      body: JSON.stringify({ display_name: 'Bobby Alpha Member' }),
+    });
+    assert.equal(editMemberRes.status, 200);
+    const memData = await editMemberRes.json();
+    assert.equal(memData.display_name, 'Bobby Alpha Member');
+
+    // 3. Super Admin updates a member's display name via PATCH /api/admin/members/:userId/name
+    const adminEditUserRes = await fetch(`${baseUrl}/api/admin/members/${env.memberUserId}/name`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${env.superSession.token}`,
+      },
+      body: JSON.stringify({ display_name: 'Bob Final Admin Edit' }),
+    });
+    assert.equal(adminEditUserRes.status, 200);
+    const adminEditUserData = await adminEditUserRes.json();
+    assert.equal(adminEditUserData.display_name, 'Bob Final Admin Edit');
+
+    // Super Admin also updates via PATCH /api/admin/persons/:personId/name
+    const adminEditPersonRes = await fetch(`${baseUrl}/api/admin/persons/${env.memberPersonId}/name`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${env.superSession.token}`,
+      },
+      body: JSON.stringify({ display_name: 'Bob By Person ID' }),
+    });
+    assert.equal(adminEditPersonRes.status, 200);
+    const adminEditPersonData = await adminEditPersonRes.json();
+    assert.equal(adminEditPersonData.display_name, 'Bob By Person ID');
+
+    // 4. Verify user appears in available persons list for trip creation before deactivation
+    const availBeforeRes = await fetch(`${baseUrl}/api/persons/available`, {
+      headers: { Authorization: `Bearer ${env.famAdminSession.token}` },
+    });
+    assert.equal(availBeforeRes.status, 200);
+    const availBeforeList = await availBeforeRes.json();
+    assert.ok(availBeforeList.some((p: any) => p.user_id === env.memberUserId));
+
+    // Deactivate user via PATCH /api/admin/members/:userId/status
+    const deactivateRes = await fetch(`${baseUrl}/api/admin/members/${env.memberUserId}/status`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${env.superSession.token}`,
+      },
+      body: JSON.stringify({ is_active: 0 }),
+    });
+    assert.equal(deactivateRes.status, 200);
+
+    // Verify user is NO LONGER in /api/persons/available (invite send list)
+    const availAfterRes = await fetch(`${baseUrl}/api/persons/available`, {
+      headers: { Authorization: `Bearer ${env.famAdminSession.token}` },
+    });
+    assert.equal(availAfterRes.status, 200);
+    const availAfterList = await availAfterRes.json();
+    assert.ok(!availAfterList.some((p: any) => p.user_id === env.memberUserId));
+
+    // Verify user is NO LONGER in /api/persons
+    const personsRes = await fetch(`${baseUrl}/api/persons`, {
+      headers: { Authorization: `Bearer ${env.famAdminSession.token}` },
+    });
+    assert.equal(personsRes.status, 200);
+    const personsList = await personsRes.json();
+    assert.ok(!personsList.some((p: any) => p.user_id === env.memberUserId));
+
+    // 5. Super Admin permanently removes a user completely with force=true
+    // First create a new member to delete
+    const freshUserRes = env.db.prepare(`INSERT INTO users (email, password_hash, role) VALUES ('fresh_remove@test.com', 'dummy_hash', 'member')`).run();
+    const freshUserId = Number(freshUserRes.lastInsertRowid);
+    const freshPersonRes = env.db.prepare(`INSERT INTO persons (display_name, user_id) VALUES ('Fresh To Remove', ?)`).run(freshUserId);
+    const freshPersonId = Number(freshPersonRes.lastInsertRowid);
+    env.db.prepare(`INSERT INTO family_memberships (family_id, person_id) VALUES (?, ?)`).run(env.famAId, freshPersonId);
+
+    const forceDeleteRes = await fetch(`${baseUrl}/api/admin/members/${freshUserId}?force=true`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${env.superSession.token}` },
+    });
+    assert.equal(forceDeleteRes.status, 200);
+    const forceDeleteData = await forceDeleteRes.json();
+    assert.equal(forceDeleteData.action, 'deleted');
+
+    // Confirm user and person are completely gone from database
+    const userInDb = env.db.prepare('SELECT id FROM users WHERE id = ?').get(freshUserId);
+    assert.equal(userInDb, undefined);
+    const personInDb = env.db.prepare('SELECT id FROM persons WHERE id = ?').get(freshPersonId);
+    assert.equal(personInDb, undefined);
+  } finally {
+    server.close();
+  }
+});
+
+

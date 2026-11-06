@@ -86,6 +86,7 @@ export const AdminDashboard: React.FC<Props> = ({ onExitAdmin, onSelectTrip, onL
   const [removeUserModal, setRemoveUserModal] = useState<{ isOpen: boolean; user?: any }>({ isOpen: false });
   const [removeUserResult, setRemoveUserResult] = useState<string | null>(null);
   const [removeUserError, setRemoveUserError] = useState<string | null>(null);
+  const [forceDeleteUser, setForceDeleteUser] = useState(false);
 
   // Invite codes state
   const [inviteCodes, setInviteCodes] = useState<any[]>([]);
@@ -348,12 +349,14 @@ export const AdminDashboard: React.FC<Props> = ({ onExitAdmin, onSelectTrip, onL
     setRemoveUserError(null);
     try {
       setLoading(true);
-      const res = await api.delete(`/admin/members/${removeUserModal.user.user_id}`);
+      const url = `/admin/members/${removeUserModal.user.user_id}${forceDeleteUser ? '?force=true' : ''}`;
+      const res = await api.delete(url);
       setRemoveUserResult(res.message);
       loadMembers();
       setTimeout(() => {
         setRemoveUserModal({ isOpen: false });
         setRemoveUserResult(null);
+        setForceDeleteUser(false);
       }, 2500);
     } catch (err: any) {
       setRemoveUserError(err.message || 'Failed to remove user');
@@ -417,7 +420,7 @@ export const AdminDashboard: React.FC<Props> = ({ onExitAdmin, onSelectTrip, onL
       setAdminEditNameModal({ isOpen: false, currentName: '' });
       loadMembers();
       if (selectedFamily) {
-        loadFamilyDetails(selectedFamily.id);
+        loadFamilyDetail(selectedFamily.id);
       }
     } catch (err: any) {
       setAdminEditNameError(err.message || 'Failed to update member name');
@@ -1111,55 +1114,89 @@ export const AdminDashboard: React.FC<Props> = ({ onExitAdmin, onSelectTrip, onL
                         </span>
                       </td>
                       <td style={{ padding: '0.85rem 1.15rem', textAlign: 'right' }}>
-                        {u.role !== 'super_admin' ? (
-                          <div style={{ display: 'inline-flex', gap: '0.4rem' }}>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setConfirmStatusModal({
-                                  isOpen: true,
-                                  user: u,
-                                  newStatus: u.user_active ? 0 : 1,
-                                })
-                              }
-                              style={{
-                                background: u.user_active ? '#fef2f2' : '#ecfdf5',
-                                border: u.user_active ? '1px solid #fecaca' : '1px solid #a7f3d0',
-                                color: u.user_active ? '#dc2626' : '#059669',
-                                borderRadius: '6px',
-                                padding: '0.35rem 0.65rem',
-                                fontSize: '0.78rem',
-                                fontWeight: 700,
-                                cursor: 'pointer',
-                              }}
-                            >
-                              {u.user_active ? 'Deactivate' : 'Activate'}
-                            </button>
+                        <div style={{ display: 'inline-flex', gap: '0.4rem', justifyContent: 'flex-end', alignItems: 'center' }}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAdminEditNameModal({
+                                isOpen: true,
+                                userId: u.user_id,
+                                personId: u.person_id,
+                                currentName: u.display_name || '',
+                                email: u.email,
+                              });
+                              setAdminEditNameInput(u.display_name || '');
+                              setAdminEditNameError(null);
+                            }}
+                            style={{
+                              background: '#f8fafc',
+                              border: '1px solid #cbd5e1',
+                              color: '#0f172a',
+                              borderRadius: '6px',
+                              padding: '0.35rem 0.65rem',
+                              fontSize: '0.78rem',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.3rem',
+                            }}
+                          >
+                            <Edit2 size={12} />
+                            Edit Name
+                          </button>
 
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setRemoveUserModal({ isOpen: true, user: u });
-                                setRemoveUserError(null);
-                                setRemoveUserResult(null);
-                              }}
-                              style={{
-                                background: '#ffffff',
-                                border: '1px solid #fecaca',
-                                color: '#dc2626',
-                                borderRadius: '6px',
-                                padding: '0.35rem 0.65rem',
-                                fontSize: '0.78rem',
-                                fontWeight: 700,
-                                cursor: 'pointer',
-                              }}
-                            >
-                              {t.removeUser || 'Remove User'}
-                            </button>
-                          </div>
-                        ) : (
-                          <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Protected</span>
-                        )}
+                          {u.role !== 'super_admin' ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setConfirmStatusModal({
+                                    isOpen: true,
+                                    user: u,
+                                    newStatus: u.user_active ? 0 : 1,
+                                  })
+                                }
+                                style={{
+                                  background: u.user_active ? '#fef2f2' : '#ecfdf5',
+                                  border: u.user_active ? '1px solid #fecaca' : '1px solid #a7f3d0',
+                                  color: u.user_active ? '#dc2626' : '#059669',
+                                  borderRadius: '6px',
+                                  padding: '0.35rem 0.65rem',
+                                  fontSize: '0.78rem',
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                {u.user_active ? 'Deactivate' : 'Activate'}
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setRemoveUserModal({ isOpen: true, user: u });
+                                  setRemoveUserError(null);
+                                  setRemoveUserResult(null);
+                                  setForceDeleteUser(false);
+                                }}
+                                style={{
+                                  background: '#ffffff',
+                                  border: '1px solid #fecaca',
+                                  color: '#dc2626',
+                                  borderRadius: '6px',
+                                  padding: '0.35rem 0.65rem',
+                                  fontSize: '0.78rem',
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                {t.removeUser || 'Remove User'}
+                              </button>
+                            </>
+                          ) : (
+                            <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Protected</span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -2545,6 +2582,23 @@ export const AdminDashboard: React.FC<Props> = ({ onExitAdmin, onSelectTrip, onL
               <p style={{ margin: 0, fontSize: '0.8rem', color: '#64748b' }}>
                 {t.removeUserExplanation || 'To protect the integrity of financial ledgers and expense settlements, users with existing financial records (paid expenses, debt allocations, repayments) cannot be permanently purged from the database. Instead, their account will be deactivated and active sessions revoked. Users with zero financial history can be permanently deleted.'}
               </p>
+
+              <div style={{ marginTop: '0.85rem', padding: '0.75rem', background: forceDeleteUser ? '#fef2f2' : '#ffffff', border: forceDeleteUser ? '1.5px solid #fecaca' : '1px solid #e2e8f0', borderRadius: '10px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.84rem', fontWeight: 700, color: forceDeleteUser ? '#dc2626' : '#0f172a' }}>
+                  <input
+                    type="checkbox"
+                    checked={forceDeleteUser}
+                    onChange={e => setForceDeleteUser(e.target.checked)}
+                    style={{ width: '16px', height: '16px', accentColor: '#dc2626', cursor: 'pointer' }}
+                  />
+                  Permanently delete user completely (purge from system)
+                </label>
+                {forceDeleteUser && (
+                  <p style={{ margin: '0.35rem 0 0 1.5rem', fontSize: '0.78rem', color: '#b91c1c', lineHeight: 1.4 }}>
+                    ⚠️ Warning: This will permanently remove the user, their person profile, memberships, and unassign any trips. This action cannot be undone.
+                  </p>
+                )}
+              </div>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.65rem' }}>
@@ -2578,9 +2632,101 @@ export const AdminDashboard: React.FC<Props> = ({ onExitAdmin, onSelectTrip, onL
                   cursor: 'pointer',
                 }}
               >
-                {t.confirmRemoveUser || 'Confirm Action'}
+                {forceDeleteUser ? 'Permanently Delete User' : (t.confirmRemoveUser || 'Confirm Action')}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Edit Member Name Modal */}
+      {adminEditNameModal.isOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.55)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2000,
+            padding: '1rem',
+          }}
+          onClick={() => setAdminEditNameModal({ isOpen: false, currentName: '' })}
+        >
+          <div
+            style={{ background: '#ffffff', borderRadius: '20px', maxWidth: '460px', width: '100%', padding: '1.75rem', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginBottom: '0.5rem' }}>
+              <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: '#eff6ff', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Edit2 size={18} />
+              </div>
+              <div>
+                <h3 style={{ fontSize: '1.2rem', fontWeight: 700, margin: 0, color: '#0f172a' }}>
+                  Edit Member Name
+                </h3>
+                {adminEditNameModal.email && (
+                  <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                    {adminEditNameModal.email}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {adminEditNameError && (
+              <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', padding: '0.65rem 0.85rem', borderRadius: '8px', fontSize: '0.82rem', margin: '0.75rem 0' }}>
+                {adminEditNameError}
+              </div>
+            )}
+
+            <form onSubmit={handleSaveAdminEditName} style={{ marginTop: '1rem' }}>
+              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#0f172a', marginBottom: '0.35rem' }}>
+                Display Name *
+              </label>
+              <input
+                type="text"
+                className="form-input"
+                value={adminEditNameInput}
+                onChange={e => setAdminEditNameInput(e.target.value)}
+                placeholder="Enter member's full name"
+                style={{ width: '100%', padding: '0.65rem 0.85rem', fontSize: '0.95rem', borderRadius: '10px', marginBottom: '1.25rem' }}
+                autoFocus
+                required
+              />
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.65rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setAdminEditNameModal({ isOpen: false, currentName: '' })}
+                  style={{
+                    background: '#f1f5f9',
+                    border: 'none',
+                    borderRadius: '10px',
+                    padding: '0.6rem 1.1rem',
+                    fontWeight: 600,
+                    fontSize: '0.88rem',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {t.cancel || 'Cancel'}
+                </button>
+                <button
+                  type="submit"
+                  disabled={adminEditNameSaving || !adminEditNameInput.trim()}
+                  className="btn btn-primary"
+                  style={{
+                    padding: '0.6rem 1.25rem',
+                    fontWeight: 700,
+                    fontSize: '0.88rem',
+                    borderRadius: '10px',
+                  }}
+                >
+                  {adminEditNameSaving ? t.loading : (t.save || 'Save Name')}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

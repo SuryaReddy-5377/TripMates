@@ -65,7 +65,9 @@ export const TripCreationModal: React.FC<Props> = ({
   const [isPrivate, setIsPrivate] = useState(false);
 
   // All available members registered on the site
-  const [availablePersons, setAvailablePersons] = useState<Person[]>(initialPersons);
+  const [availablePersons, setAvailablePersons] = useState<Person[]>(() =>
+    (initialPersons || []).filter((p: any) => p.is_active !== 0 && p.is_active !== false)
+  );
   const [selectedPersonIds, setSelectedPersonIds] = useState<number[]>([]);
   const [selectedFamilyIds, setSelectedFamilyIds] = useState<number[]>(families.map(f => f.id));
   const [memberSearch, setMemberSearch] = useState('');
@@ -78,8 +80,8 @@ export const TripCreationModal: React.FC<Props> = ({
     const fetchAvailable = async () => {
       try {
         const res = await api.get('/persons/available');
-        if (Array.isArray(res) && res.length > 0) {
-          setAvailablePersons(res);
+        if (Array.isArray(res)) {
+          setAvailablePersons(res.filter((p: any) => p.is_active !== 0 && p.is_active !== false));
         }
       } catch {
         // fallback to initialPersons

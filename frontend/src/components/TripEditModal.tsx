@@ -58,7 +58,7 @@ export const TripEditModal: React.FC<Props> = ({ trip, onClose, onTripUpdated })
       try {
         setLoading(true);
         const data = await api.get('/persons/available');
-        setAvailablePersons(data);
+        setAvailablePersons(Array.isArray(data) ? data.filter((p: any) => p.is_active !== 0 && p.is_active !== false) : []);
       } catch (err: any) {
         console.error('Failed to load available members:', err);
       } finally {

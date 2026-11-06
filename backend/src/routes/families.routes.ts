@@ -26,9 +26,10 @@ familiesRouter.get('/', requireAuth, async (req: Request, res: Response) => {
     const families = await req.db.prepare(`
       SELECT f.id, f.name, f.admin_user_id, f.is_active, f.created_at,
              u.email as admin_email,
-             (SELECT count(*) FROM family_memberships fm WHERE fm.family_id = f.id AND fm.left_at IS NULL) as member_count
+             (SELECT count(*) FROM family_memberships fm JOIN persons p ON fm.person_id = p.id WHERE fm.family_id = f.id AND fm.left_at IS NULL AND p.is_active = 1) as member_count
       FROM families f
       LEFT JOIN users u ON f.admin_user_id = u.id
+      WHERE f.is_active = 1
       ORDER BY f.name ASC
     `).all();
     res.json(families);
@@ -40,10 +41,10 @@ familiesRouter.get('/', requireAuth, async (req: Request, res: Response) => {
     const fam = await req.db.prepare(`
       SELECT f.id, f.name, f.admin_user_id, f.is_active, f.created_at,
              u.email as admin_email,
-             (SELECT count(*) FROM family_memberships fm WHERE fm.family_id = f.id AND fm.left_at IS NULL) as member_count
+             (SELECT count(*) FROM family_memberships fm JOIN persons p ON fm.person_id = p.id WHERE fm.family_id = f.id AND fm.left_at IS NULL AND p.is_active = 1) as member_count
       FROM families f
       LEFT JOIN users u ON f.admin_user_id = u.id
-      WHERE f.id = ?
+      WHERE f.id = ? AND f.is_active = 1
     `).get(req.family.id);
     res.json(fam ? [fam] : []);
     return;
@@ -134,7 +135,7 @@ familiesRouter.get('/:familyId', requireAuth, requireFamilyAccess('familyId'), a
     FROM family_memberships fm
     JOIN persons p ON fm.person_id = p.id
     LEFT JOIN users u ON p.user_id = u.id
-    WHERE fm.family_id = ? AND fm.left_at IS NULL AND p.is_active = 1
+    WHERE fm.family_id = ? AND fm.left_at IS NULL AND p.is_active = 1 AND (u.id IS NULL OR u.is_active = 1)
     ORDER BY p.display_name ASC
   `).all(familyId);
 

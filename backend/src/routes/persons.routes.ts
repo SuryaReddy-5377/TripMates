@@ -19,7 +19,7 @@ personsRouter.get('/available', requireAuth, async (req: Request, res: Response)
     LEFT JOIN family_memberships fm ON fm.person_id = p.id AND fm.left_at IS NULL
     LEFT JOIN families f ON fm.family_id = f.id
     LEFT JOIN users u ON p.user_id = u.id
-    WHERE p.is_active = 1
+    WHERE p.is_active = 1 AND (u.id IS NULL OR u.is_active = 1)
     ORDER BY p.display_name ASC
   `).all();
   res.json(persons);
@@ -35,7 +35,7 @@ personsRouter.get('/', requireAuth, async (req: Request, res: Response) => {
       LEFT JOIN family_memberships fm ON fm.person_id = p.id AND fm.left_at IS NULL
       LEFT JOIN families f ON fm.family_id = f.id
       LEFT JOIN users u ON p.user_id = u.id
-      WHERE p.is_active = 1
+      WHERE p.is_active = 1 AND (u.id IS NULL OR u.is_active = 1)
       ORDER BY p.display_name ASC
     `).all();
     res.json(persons);
@@ -54,7 +54,7 @@ personsRouter.get('/', requireAuth, async (req: Request, res: Response) => {
     LEFT JOIN family_memberships fm ON fm.person_id = p.id AND fm.left_at IS NULL
     LEFT JOIN families f ON fm.family_id = f.id
     LEFT JOIN users u ON p.user_id = u.id
-    WHERE p.is_active = 1 AND (
+    WHERE p.is_active = 1 AND (u.id IS NULL OR u.is_active = 1) AND (
       (fm.family_id IS NOT NULL AND fm.family_id = ?)
       OR p.id = ?
       OR p.id IN (
