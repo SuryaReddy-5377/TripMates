@@ -34,6 +34,9 @@ export interface Translations {
   tripName: string;
   destination: string;
   dates: string;
+  date: string;
+  member: string;
+  members: string;
   budget: string;
   status: string;
   privateTrip: string;
@@ -129,6 +132,17 @@ export interface Translations {
   recordRepayment: string;
   settleUp: string;
   suggestedSettlements: string;
+  suggestedSettlementTransfers: string;
+  settlementSolverDesc: string;
+  settleNow: string;
+  payNow: string;
+  recordSettlement: string;
+  fromDebtor: string;
+  toCreditor: string;
+  addedFromSharedRemainder: string;
+  owesTo: string;
+  allowAdvanceHelp: string;
+  optionalDescription: string;
   allSettled: string;
   unsettled: string;
   owes: string;
@@ -462,6 +476,9 @@ export const translations: Record<Language, Translations> = {
     tripName: 'Trip Name',
     destination: 'Destination',
     dates: 'Dates',
+    date: 'Date',
+    member: 'member',
+    members: 'members',
     budget: 'Budget',
     status: 'Status',
     privateTrip: 'Private Trip (Restricted after completion)',
@@ -553,6 +570,17 @@ export const translations: Record<Language, Translations> = {
     recordRepayment: 'Record Repayment',
     settleUp: 'Settle Up',
     suggestedSettlements: 'Suggested Settlements',
+    suggestedSettlementTransfers: 'Suggested Settlement Transfers',
+    settlementSolverDesc: 'Calculated with a minimal-path transaction solver to settle all balances in the fewest steps.',
+    settleNow: 'Settle Now',
+    payNow: 'Pay Now',
+    recordSettlement: 'Record Settlement',
+    fromDebtor: 'From (Debtor)',
+    toCreditor: 'To (Creditor)',
+    addedFromSharedRemainder: 'added from shared remainder',
+    owesTo: 'owes',
+    allowAdvanceHelp: 'Permit payment above current net debt',
+    optionalDescription: 'Optional description',
     allSettled: 'All balances are settled!',
     unsettled: 'Pending balances to settle',
     owes: 'Owes',
@@ -883,6 +911,9 @@ export const translations: Record<Language, Translations> = {
     tripName: 'యాత్ర పేరు',
     destination: 'గమ్యస్థానం',
     dates: 'తేదీలు',
+    date: 'తేదీ',
+    member: 'సభ్యుడు',
+    members: 'సభ్యులు',
     budget: 'బడ్జెట్',
     status: 'స్థితి',
     privateTrip: 'ప్రైవేట్ యాత్ర (పూర్తయిన తర్వాత పరిమిత ప్రాప్యత)',
@@ -974,6 +1005,17 @@ export const translations: Record<Language, Translations> = {
     recordRepayment: 'చెల్లింపు నమోదు చేయండి',
     settleUp: 'లెక్క తేల్చండి',
     suggestedSettlements: 'సూచించిన బదిలీలు',
+    suggestedSettlementTransfers: 'సూచించిన సెటిల్‌మెంట్ బదిలీలు',
+    settlementSolverDesc: 'అన్ని బ్యాలెన్స్‌లను తక్కువ లావాదేవీల్లో పరిష్కరించేందుకు కనీస లావాదేవీల పద్ధతిలో లెక్కించబడింది.',
+    settleNow: 'సెటిల్ చేయండి',
+    payNow: 'ఇప్పుడే చెల్లించండి',
+    recordSettlement: 'చెల్లింపు నమోదు',
+    fromDebtor: 'ఎవరి నుండి (చెల్లించేవారు)',
+    toCreditor: 'ఎవరికి (స్వీకరించేవారు)',
+    addedFromSharedRemainder: 'మిగిలిన మొత్తం నుండి సమానంగా జోడించబడింది',
+    owesTo: 'బాకీ చెల్లించాలి',
+    allowAdvanceHelp: 'ప్రస్తుత నికర బాకీ కంటే ఎక్కువ చెల్లింపును అనుమతించండి',
+    optionalDescription: 'వివరణ (ఐచ్ఛికం)',
     allSettled: 'అన్ని లెక్కలు పూర్తయ్యాయి!',
     unsettled: 'చెల్లించాల్సిన బాకీలు ఉన్నాయి',
     owes: 'బాకీ ఉంది',

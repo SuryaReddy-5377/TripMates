@@ -17,9 +17,17 @@ import { accountToKey, keyToAccount } from './expenses.routes';
 export const repaymentsRouter = Router({ mergeParams: true });
 
 const createRepaymentSchema = z.object({
-  from_type: z.enum(['person', 'family']),
+  from_type: z.preprocess(v => {
+    if (v === 'p' || v === 'person') return 'person';
+    if (v === 'f' || v === 'family') return 'family';
+    return v;
+  }, z.enum(['person', 'family'])),
   from_id: z.number().int().positive(),
-  to_type: z.enum(['person', 'family']),
+  to_type: z.preprocess(v => {
+    if (v === 'p' || v === 'person') return 'person';
+    if (v === 'f' || v === 'family') return 'family';
+    return v;
+  }, z.enum(['person', 'family'])),
   to_id: z.number().int().positive(),
   amount_paise: z.number().int().positive().optional(),
   amount_rupees: z.union([z.string(), z.number()]).optional(),

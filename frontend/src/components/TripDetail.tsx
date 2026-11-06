@@ -631,24 +631,25 @@ export const TripDetail: React.FC<Props> = ({
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
                 <Sparkles size={18} style={{ color: '#059669' }} />
                 <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#0f172a', margin: 0, fontFamily: 'var(--font-display)' }}>
-                  Suggested Settlement Transfers
+                  {t.suggestedSettlementTransfers}
                 </h3>
               </div>
               <p style={{ color: '#64748b', fontSize: '0.82rem', marginBottom: '1.25rem' }}>
-                Calculated with a minimal-path transaction solver to settle all balances in the fewest steps.
+                {t.settlementSolverDesc}
               </p>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                 {ledger.suggestedSettlements.map((s: any, idx: number) => {
                   const isCurrentDebtor = s.from_id === currentPerson?.id && s.from_type === 'person';
                   const isCurrentCreditor = s.to_id === currentPerson?.id && s.to_type === 'person';
+                  const canSettleThis = isCurrentDebtor || isCurrentCreditor || (currentUser?.role === 'super_admin');
 
                   return (
                     <div
                       key={idx}
                       style={{
                         background: isCurrentDebtor ? '#fef2f2' : isCurrentCreditor ? '#f0fdf4' : '#f8fafc',
-                        border: isCurrentDebtor ? '1px solid #fecaca' : isCurrentCreditor ? '1px solid #bbf7d0' : '1px solid #e2e8f0',
+                        border: isCurrentDebtor ? '1.5px solid #fecaca' : isCurrentCreditor ? '1.5px solid #bbf7d0' : '1px solid #e2e8f0',
                         borderRadius: '12px',
                         padding: '1rem 1.25rem',
                         display: 'flex',
@@ -660,26 +661,26 @@ export const TripDetail: React.FC<Props> = ({
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
                         <div style={{
-                          width: '34px',
-                          height: '34px',
+                          width: '36px',
+                          height: '36px',
                           borderRadius: '50%',
-                          background: '#fee2e2',
-                          color: '#dc2626',
+                          background: isCurrentDebtor ? '#fee2e2' : '#e2e8f0',
+                          color: isCurrentDebtor ? '#dc2626' : '#334155',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
                           fontWeight: 700,
-                          fontSize: '0.8rem',
+                          fontSize: '0.82rem',
                         }}>
                           {s.from_name.slice(0, 2).toUpperCase()}
                         </div>
 
                         <div>
                           <span style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.95rem' }}>{s.from_name}</span>
-                          {isCurrentDebtor && <span className="badge badge-red" style={{ marginLeft: '0.4rem', fontSize: '0.68rem' }}>You</span>}
-                          <span style={{ color: '#64748b', margin: '0 0.5rem', fontSize: '0.85rem' }}>owes</span>
+                          {isCurrentDebtor && <span className="badge badge-red" style={{ marginLeft: '0.4rem', fontSize: '0.68rem' }}>{t.you}</span>}
+                          <span style={{ color: '#64748b', margin: '0 0.5rem', fontSize: '0.85rem' }}>{t.owesTo}</span>
                           <span style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.95rem' }}>{s.to_name}</span>
-                          {isCurrentCreditor && <span className="badge badge-green" style={{ marginLeft: '0.4rem', fontSize: '0.68rem' }}>You</span>}
+                          {isCurrentCreditor && <span className="badge badge-green" style={{ marginLeft: '0.4rem', fontSize: '0.68rem' }}>{t.you}</span>}
                         </div>
                       </div>
 
@@ -687,14 +688,16 @@ export const TripDetail: React.FC<Props> = ({
                         <span style={{ fontSize: '1.25rem', fontWeight: 800, color: '#059669' }}>
                           {formatINR(s.amount)}
                         </span>
-                        <button
-                          type="button"
-                          onClick={() => openRepaymentForSuggestion(s)}
-                          className="btn btn-primary btn-sm"
-                          style={{ padding: '0.4rem 0.85rem' }}
-                        >
-                          Settle Now
-                        </button>
+                        {canSettleThis && (
+                          <button
+                            type="button"
+                            onClick={() => openRepaymentForSuggestion(s)}
+                            className="btn btn-primary btn-sm"
+                            style={{ padding: '0.4rem 0.85rem', fontWeight: 600 }}
+                          >
+                            {isCurrentDebtor ? t.payNow : (isCurrentCreditor ? t.recordSettlement : t.settleNow)}
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
@@ -703,145 +706,11 @@ export const TripDetail: React.FC<Props> = ({
             </div>
           )}
 
-          {/* Member Balances Grid (Lovable style cards) */}
-          <div className="card-white" style={{ borderRadius: '16px', padding: '1.5rem', border: '1px solid #e2e8f0' }}>
-            <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#0f172a', marginBottom: '0.35rem', fontFamily: 'var(--font-display)' }}>
-              Member Balances
-            </h3>
-            <p style={{ color: '#64748b', fontSize: '0.82rem', marginBottom: '1.25rem' }}>
-              Full financial standing for every participant from the start of the trip.
-            </p>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
-              {ledger?.balances?.map((b: any) => {
-                const initials = b.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase();
-                const isMe = b.key === `p:${currentPerson?.id}`;
-
-                return (
-                  <div
-                    key={b.key}
-                    style={{
-                      background: '#ffffff',
-                      border: isMe ? '2px solid #0f172a' : '1px solid #e2e8f0',
-                      borderRadius: '14px',
-                      padding: '1.15rem',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      justifyContent: 'space-between',
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-                    }}
-                  >
-                    <div>
-                      {/* Card Header: Avatar, Name, Net Badge */}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.85rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-                          <div style={{
-                            width: '38px',
-                            height: '38px',
-                            borderRadius: '50%',
-                            background: isMe ? '#0f172a' : '#f1f5f9',
-                            color: isMe ? '#ffffff' : '#334155',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontWeight: 700,
-                            fontSize: '0.85rem',
-                          }}>
-                            {initials}
-                          </div>
-                          <div>
-                            <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                              {b.name}
-                              {isMe && <span className="badge badge-green" style={{ fontSize: '0.65rem' }}>You</span>}
-                            </div>
-                            <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
-                              {b.type === 'family' ? 'Family Unit' : 'Individual'}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Status Badge */}
-                        <span style={{
-                          fontSize: '0.75rem',
-                          fontWeight: 700,
-                          padding: '0.2rem 0.55rem',
-                          borderRadius: '8px',
-                          background: b.net > 0 ? '#dcfce7' : b.net < 0 ? '#fee2e2' : '#f1f5f9',
-                          color: b.net > 0 ? '#15803d' : b.net < 0 ? '#dc2626' : '#64748b',
-                        }}>
-                          {b.net > 0 ? `+${formatINR(b.net)} Gets back` : b.net < 0 ? `-${formatINR(Math.abs(b.net))} Owes` : 'Settled'}
-                        </span>
-                      </div>
-
-                      {/* Stat Rows */}
-                      <div style={{
-                        background: '#f8fafc',
-                        borderRadius: '10px',
-                        padding: '0.75rem',
-                        fontSize: '0.78rem',
-                        display: 'grid',
-                        gridTemplateColumns: '1fr 1fr',
-                        gap: '0.5rem',
-                        border: '1px solid #f1f5f9',
-                      }}>
-                        <div>
-                          <div style={{ color: '#64748b' }}>Total Paid</div>
-                          <div style={{ fontWeight: 700, color: '#0f172a', marginTop: '1px' }}>{formatINR(b.paid)}</div>
-                        </div>
-                        <div>
-                          <div style={{ color: '#64748b' }}>Total Share</div>
-                          <div style={{ fontWeight: 700, color: '#0f172a', marginTop: '1px' }}>{formatINR(b.share)}</div>
-                        </div>
-                        <div>
-                          <div style={{ color: '#64748b' }}>Repaid</div>
-                          <div style={{ fontWeight: 600, color: '#0f172a', marginTop: '1px' }}>{formatINR(b.sent)}</div>
-                        </div>
-                        <div>
-                          <div style={{ color: '#64748b' }}>Received</div>
-                          <div style={{ fontWeight: 600, color: '#0f172a', marginTop: '1px' }}>{formatINR(b.received)}</div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Settle Up Action Button if debt exists */}
-                    {b.net !== 0 && (
-                      <div style={{ marginTop: '0.85rem', paddingTop: '0.65rem', borderTop: '1px solid #f1f5f9' }}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (b.net < 0) {
-                              setRepaymentPrefill({
-                                from: { type: b.type, id: b.id, name: b.name },
-                                to: null,
-                                amountPaise: Math.abs(b.net),
-                              });
-                            } else {
-                              setRepaymentPrefill({
-                                from: null,
-                                to: { type: b.type, id: b.id, name: b.name },
-                                amountPaise: b.net,
-                              });
-                            }
-                            setShowRepaymentModal(true);
-                          }}
-                          className="btn btn-secondary btn-sm"
-                          style={{ width: '100%', justifyContent: 'center', fontSize: '0.78rem' }}
-                        >
-                          <Scale size={14} /> Settle with {b.name.split(' ')[0]}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
           {/* Repayments History */}
           {repayments.length > 0 && (
             <div className="card-white" style={{ borderRadius: '16px', padding: '1.5rem', border: '1px solid #e2e8f0' }}>
               <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#0f172a', marginBottom: '0.85rem', fontFamily: 'var(--font-display)' }}>
-                Recorded Repayments History
+                {t.repayments || 'Recorded Repayments History'}
               </h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
                 {repayments.map((r: any) => (

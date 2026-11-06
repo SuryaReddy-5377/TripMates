@@ -77,6 +77,7 @@ const expenseInputSchema = z.object({
   // For individual amount + equal shared remainder
   individual_remainder_entries: z.array(z.object({ id: z.string(), individual_amount_paise: z.number().int().nonnegative() })).optional(),
   individual_entries: z.array(z.object({ id: z.string(), individual_amount_paise: z.number().int().nonnegative() })).optional(),
+  remainder_target: z.enum(['all', 'remaining_only']).optional(),
 
   // For percentage: entries { id, bps }
   percentage_entries: z.array(z.object({ id: z.string(), bps: z.number().int().nonnegative() })).optional(),
@@ -180,9 +181,10 @@ function calculateSplitResult(input: z.infer<typeof expenseInputSchema>) {
   } else if (input.split_method === 'individual_remainder') {
     if (!totalPaise) throw new Error('Total amount is required');
     const rawEntries = input.individual_remainder_entries || input.individual_entries;
+    const remainderTarget = (input.remainder_target as 'all' | 'remaining_only') || 'all';
     if (!rawEntries || rawEntries.length === 0) {
       if (input.participant_keys && input.participant_keys.length > 0) {
-        const res = individualRemainderSplit(totalPaise, input.participant_keys.map(k => ({ id: k, individualAmount: 0 })));
+        const res = individualRemainderSplit(totalPaise, input.participant_keys.map(k => ({ id: k, individualAmount: 0 })), remainderTarget);
         allocations = res.allocations;
       } else {
         throw new Error('At least one participant must be selected');
@@ -192,7 +194,7 @@ function calculateSplitResult(input: z.infer<typeof expenseInputSchema>) {
         id: e.id,
         individualAmount: e.individual_amount_paise,
       }));
-      const res = individualRemainderSplit(totalPaise, entries);
+      const res = individualRemainderSplit(totalPaise, entries, remainderTarget);
       allocations = res.allocations;
     }
   } else if (input.split_method === 'percentage') {

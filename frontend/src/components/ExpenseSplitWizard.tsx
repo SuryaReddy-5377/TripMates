@@ -244,9 +244,20 @@ export const ExpenseSplitWizard: React.FC<Props> = ({
   const isPersonOver = personAllocatedPaise > totalPaise;
   const isPersonMatched = personAllocatedPaise === totalPaise && totalPaise > 0;
 
-  // Remainder per person if remainder rule is active
-  const equalRemainderPerPersonPaise = (mainOption === 'custom' && subOption === 'per_head' && splitRemainderEqually && selectedPersonKeys.length > 0)
-    ? Math.floor(Math.max(0, personRemainingPaise) / selectedPersonKeys.length)
+  // Participants who do NOT have an explicit custom amount entered
+  const zeroAmountPersonKeys = useMemo(() => {
+    return selectedPersonKeys.filter(key => toPaise(customPersonAmounts[key] || '0') === 0);
+  }, [selectedPersonKeys, customPersonAmounts]);
+
+  const targetRemainderKeys = useMemo(() => {
+    return (zeroAmountPersonKeys.length > 0 && zeroAmountPersonKeys.length < selectedPersonKeys.length)
+      ? zeroAmountPersonKeys
+      : selectedPersonKeys;
+  }, [zeroAmountPersonKeys, selectedPersonKeys]);
+
+  // Remainder per person if remainder rule is active (split strictly among remaining members with 0)
+  const equalRemainderPerPersonPaise = (mainOption === 'custom' && subOption === 'per_head' && splitRemainderEqually && targetRemainderKeys.length > 0)
+    ? Math.floor(Math.max(0, personRemainingPaise) / targetRemainderKeys.length)
     : 0;
 
   // Calculations for Family-Wise Custom
@@ -347,6 +358,7 @@ export const ExpenseSplitWizard: React.FC<Props> = ({
               paid_by_id: safePayerId,
               accounting_mode: 'individual',
               split_method: 'individual_remainder',
+              remainder_target: 'remaining_only',
               individual_entries: selectedPersonKeys.map(k => ({
                 id: k,
                 individual_amount_paise: toPaise(customPersonAmounts[k] || '0'),
@@ -607,6 +619,7 @@ export const ExpenseSplitWizard: React.FC<Props> = ({
         payload.accounting_mode = 'individual';
         if (splitRemainderEqually) {
           payload.split_method = 'individual_remainder';
+          payload.remainder_target = 'remaining_only';
           payload.individual_entries = selectedPersonKeys.map(k => ({
             id: k,
             individual_amount_paise: toPaise(customPersonAmounts[k] || '0'),
@@ -1401,7 +1414,7 @@ export const ExpenseSplitWizard: React.FC<Props> = ({
 
               {splitRemainderEqually && selectedPersonKeys.length > 0 && personRemainingPaise > 0 && (
                 <div style={{ width: '100%', fontSize: '0.75rem', color: '#059669', fontWeight: 600, borderTop: '1px dashed #bbf7d0', paddingTop: '0.35rem' }}>
-                  +{formatINR(equalRemainderPerPersonPaise)} / member added from shared remainder
+                  +{formatINR(equalRemainderPerPersonPaise)} / {t.member || 'member'} {t.addedFromSharedRemainder} ({targetRemainderKeys.length} {targetRemainderKeys.length === 1 ? (t.member || 'member') : (t.members || 'members')})
                 </div>
               )}
             </div>
@@ -1412,10 +1425,11 @@ export const ExpenseSplitWizard: React.FC<Props> = ({
                 const key = `p:${p.id}`;
                 const isSelected = selectedPersonKeys.includes(key);
                 const alloc = preview?.allocations?.find((a: any) => a.id === key);
+                const isTargetOfRemainder = targetRemainderKeys.includes(key);
                 const finalSharePaise = alloc
                   ? alloc.amount
                   : isSelected
-                    ? toPaise(customPersonAmounts[key] || '0') + (splitRemainderEqually ? equalRemainderPerPersonPaise : 0)
+                    ? toPaise(customPersonAmounts[key] || '0') + (splitRemainderEqually && isTargetOfRemainder ? equalRemainderPerPersonPaise : 0)
                     : 0;
 
                 return (

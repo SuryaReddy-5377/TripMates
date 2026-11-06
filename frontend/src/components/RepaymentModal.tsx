@@ -113,13 +113,13 @@ export const RepaymentModal: React.FC<Props> = ({
           {/* Sender & Recipient */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: '0.5rem', alignItems: 'center', marginBottom: '1.25rem' }}>
             <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label">From (Debtor)</label>
+              <label className="form-label">{t.fromDebtor}</label>
               <select
                 className="form-select"
-                value={`${fromType}:${fromId}`}
+                value={`${fromType === 'family' ? 'f' : 'p'}:${fromId}`}
                 onChange={e => {
-                  const [t, id] = e.target.value.split(':');
-                  setFromType(t as any);
+                  const [prefix, id] = e.target.value.split(':');
+                  setFromType(prefix === 'f' || prefix === 'family' ? 'family' : 'person');
                   setFromId(Number(id));
                 }}
               >
@@ -134,13 +134,13 @@ export const RepaymentModal: React.FC<Props> = ({
             </div>
 
             <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label">To (Creditor)</label>
+              <label className="form-label">{t.toCreditor}</label>
               <select
                 className="form-select"
-                value={`${toType}:${toId}`}
+                value={`${toType === 'family' ? 'f' : 'p'}:${toId}`}
                 onChange={e => {
-                  const [t, id] = e.target.value.split(':');
-                  setToType(t as any);
+                  const [prefix, id] = e.target.value.split(':');
+                  setToType(prefix === 'f' || prefix === 'family' ? 'family' : 'person');
                   setToId(Number(id));
                 }}
               >
@@ -168,7 +168,7 @@ export const RepaymentModal: React.FC<Props> = ({
             </div>
 
             <div className="form-group">
-              <label className="form-label">Date</label>
+              <label className="form-label">{t.date || 'Date'}</label>
               <input
                 type="date"
                 className="form-input"
@@ -196,7 +196,7 @@ export const RepaymentModal: React.FC<Props> = ({
             <input
               type="text"
               className="form-input"
-              placeholder="Optional description"
+              placeholder={t.optionalDescription}
               value={note}
               onChange={e => setNote(e.target.value)}
             />
@@ -211,7 +211,7 @@ export const RepaymentModal: React.FC<Props> = ({
               onChange={e => setAllowAdvance(e.target.checked)}
             />
             <label htmlFor="advanceCheck" style={{ fontSize: '0.85rem', color: '#95b8a6', cursor: 'pointer' }}>
-              {t.allowAdvance} (Permit payment above current net debt)
+              {t.allowAdvance} ({t.allowAdvanceHelp})
             </label>
           </div>
 

@@ -73,7 +73,8 @@ export interface IndividualRemainderResult {
  */
 export function individualRemainderSplit(
   total: Paise,
-  entries: IndividualRemainderEntry[]
+  entries: IndividualRemainderEntry[],
+  remainderTarget: 'all' | 'remaining_only' = 'all'
 ): IndividualRemainderResult {
   assertPaise(total, 'total', { allowZero: false });
   uniqueIds(entries.map(e => e.id));
@@ -88,13 +89,27 @@ export function individualRemainderSplit(
   }
 
   const sharedRemainder = total - individualTotal;
-  const remainderAmts = sharedRemainder > 0
-    ? allocateByWeights(sharedRemainder, entries.map(() => 1), entries.map(e => e.id))
-    : entries.map(() => 0);
 
-  const allocations: Allocation[] = entries.map((e, i) => ({
+  let targetEntries = entries;
+  if (remainderTarget === 'remaining_only') {
+    const zeroEntries = entries.filter(e => e.individualAmount === 0);
+    if (zeroEntries.length > 0 && zeroEntries.length < entries.length) {
+      targetEntries = zeroEntries;
+    }
+  }
+
+  const remainderAmts = sharedRemainder > 0
+    ? allocateByWeights(sharedRemainder, targetEntries.map(() => 1), targetEntries.map(e => e.id))
+    : targetEntries.map(() => 0);
+
+  const remainderMap = new Map<string, number>();
+  targetEntries.forEach((e, idx) => {
+    remainderMap.set(e.id, remainderAmts[idx]);
+  });
+
+  const allocations: Allocation[] = entries.map(e => ({
     id: e.id,
-    amount: e.individualAmount + remainderAmts[i],
+    amount: e.individualAmount + (remainderMap.get(e.id) || 0),
   }));
 
   mustEqual(total, sumAmounts(allocations), 'The final shares');
