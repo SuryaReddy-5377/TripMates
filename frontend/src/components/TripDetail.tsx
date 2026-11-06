@@ -706,6 +706,111 @@ export const TripDetail: React.FC<Props> = ({
             </div>
           )}
 
+          {/* Member Balances Grid (Display Only - Settle action handled in Suggested Transfers above) */}
+          <div className="card-white" style={{ borderRadius: '16px', padding: '1.5rem', border: '1px solid #e2e8f0' }}>
+            <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#0f172a', marginBottom: '0.35rem', fontFamily: 'var(--font-display)' }}>
+              {t.memberBalances}
+            </h3>
+            <p style={{ color: '#64748b', fontSize: '0.82rem', marginBottom: '1.25rem' }}>
+              {t.memberBalancesDesc}
+            </p>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
+              {ledger?.balances?.map((b: any) => {
+                const initials = b.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase();
+                const isMe = b.key === `p:${currentPerson?.id}`;
+
+                return (
+                  <div
+                    key={b.key}
+                    style={{
+                      background: '#ffffff',
+                      border: isMe ? '2px solid #0f172a' : '1px solid #e2e8f0',
+                      borderRadius: '14px',
+                      padding: '1.15rem',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                    }}
+                  >
+                    <div>
+                      {/* Card Header: Avatar, Name, Net Badge */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.85rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                          <div style={{
+                            width: '38px',
+                            height: '38px',
+                            borderRadius: '50%',
+                            background: isMe ? '#0f172a' : '#f1f5f9',
+                            color: isMe ? '#ffffff' : '#334155',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontWeight: 700,
+                            fontSize: '0.85rem',
+                          }}>
+                            {initials}
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                              {b.name}
+                              {isMe && <span className="badge badge-green" style={{ fontSize: '0.65rem' }}>{t.you}</span>}
+                            </div>
+                            <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                              {b.type === 'family' ? t.familyUnit : t.individual}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Status Badge */}
+                        <span style={{
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          padding: '0.2rem 0.55rem',
+                          borderRadius: '8px',
+                          background: b.net > 0 ? '#dcfce7' : b.net < 0 ? '#fee2e2' : '#f1f5f9',
+                          color: b.net > 0 ? '#15803d' : b.net < 0 ? '#dc2626' : '#64748b',
+                        }}>
+                          {b.net > 0 ? `+${formatINR(b.net)} ${t.getsBack}` : b.net < 0 ? `-${formatINR(Math.abs(b.net))} ${t.owes}` : t.settled}
+                        </span>
+                      </div>
+
+                      {/* Stat Rows */}
+                      <div style={{
+                        background: '#f8fafc',
+                        borderRadius: '10px',
+                        padding: '0.75rem',
+                        fontSize: '0.78rem',
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 1fr',
+                        gap: '0.5rem',
+                        border: '1px solid #f1f5f9',
+                      }}>
+                        <div>
+                          <div style={{ color: '#64748b' }}>{t.totalPaid}</div>
+                          <div style={{ fontWeight: 700, color: '#0f172a', marginTop: '1px' }}>{formatINR(b.paid)}</div>
+                        </div>
+                        <div>
+                          <div style={{ color: '#64748b' }}>{t.totalShare}</div>
+                          <div style={{ fontWeight: 700, color: '#0f172a', marginTop: '1px' }}>{formatINR(b.share)}</div>
+                        </div>
+                        <div>
+                          <div style={{ color: '#64748b' }}>{t.repaid}</div>
+                          <div style={{ fontWeight: 600, color: '#0f172a', marginTop: '1px' }}>{formatINR(b.sent)}</div>
+                        </div>
+                        <div>
+                          <div style={{ color: '#64748b' }}>{t.received}</div>
+                          <div style={{ fontWeight: 600, color: '#0f172a', marginTop: '1px' }}>{formatINR(b.received)}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Repayments History */}
           {repayments.length > 0 && (
             <div className="card-white" style={{ borderRadius: '16px', padding: '1.5rem', border: '1px solid #e2e8f0' }}>

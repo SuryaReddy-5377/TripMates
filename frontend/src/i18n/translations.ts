@@ -143,6 +143,16 @@ export interface Translations {
   owesTo: string;
   allowAdvanceHelp: string;
   optionalDescription: string;
+  memberBalances: string;
+  memberBalancesDesc: string;
+  totalPaid: string;
+  totalShare: string;
+  repaid: string;
+  received: string;
+  familyUnit: string;
+  individual: string;
+  settled: string;
+  getsBack: string;
   allSettled: string;
   unsettled: string;
   owes: string;
@@ -581,6 +591,16 @@ export const translations: Record<Language, Translations> = {
     owesTo: 'owes',
     allowAdvanceHelp: 'Permit payment above current net debt',
     optionalDescription: 'Optional description',
+    memberBalances: 'Member Balances',
+    memberBalancesDesc: 'Full financial standing for every participant from the start of the trip.',
+    totalPaid: 'Total Paid',
+    totalShare: 'Total Share',
+    repaid: 'Repaid',
+    received: 'Received',
+    familyUnit: 'Family Unit',
+    individual: 'Individual',
+    settled: 'Settled',
+    getsBack: 'Gets back',
     allSettled: 'All balances are settled!',
     unsettled: 'Pending balances to settle',
     owes: 'Owes',
@@ -1016,6 +1036,16 @@ export const translations: Record<Language, Translations> = {
     owesTo: 'బాకీ చెల్లించాలి',
     allowAdvanceHelp: 'ప్రస్తుత నికర బాకీ కంటే ఎక్కువ చెల్లింపును అనుమతించండి',
     optionalDescription: 'వివరణ (ఐచ్ఛికం)',
+    memberBalances: 'సభ్యుల బ్యాలెన్స్‌లు',
+    memberBalancesDesc: 'యాత్ర ప్రారంభం నుండి ప్రతి సభ్యుని పూర్తి ఆర్థిక వివరాలు.',
+    totalPaid: 'చెల్లించిన మొత్తం',
+    totalShare: 'మొత్తం వాటా',
+    repaid: 'తిరిగి చెల్లించినవి',
+    received: 'స్వీకరించినవి',
+    familyUnit: 'కుటుంబ విభాగం',
+    individual: 'వ్యక్తిగతం',
+    settled: 'సెటిల్ అయింది',
+    getsBack: 'వాపస్ రావాలి',
     allSettled: 'అన్ని లెక్కలు పూర్తయ్యాయి!',
     unsettled: 'చెల్లించాల్సిన బాకీలు ఉన్నాయి',
     owes: 'బాకీ ఉంది',
