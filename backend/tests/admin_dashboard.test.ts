@@ -554,6 +554,30 @@ test('Trip Invitation & Custom Cover Photo: available persons discovery and cove
     });
     assert.equal(adminCoverRes.status, 200);
 
+    // 4b. Test Edit Trip Details with participant_person_ids and updated dates/destination (TripEditModal flow)
+    const updateTripDetailsRes = await fetch(`${baseUrl}/api/trips/${tripId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${env.famAdminSession.token}`,
+      },
+      body: JSON.stringify({
+        name: 'SUMMER Holidays',
+        destination: 'Himalaya',
+        start_date: '2026-12-09',
+        end_date: '2026-12-19',
+        budget_paise: 10000000,
+        participant_person_ids: [env.famAdminPersonId, env.memberPersonId],
+      }),
+    });
+    assert.equal(updateTripDetailsRes.status, 200);
+    const updatedDetailsTrip = await (await fetch(`${baseUrl}/api/trips/${tripId}`, {
+      headers: { Authorization: `Bearer ${env.famAdminSession.token}` },
+    })).json();
+    assert.equal(updatedDetailsTrip.name, 'SUMMER Holidays');
+    assert.equal(updatedDetailsTrip.destination, 'Himalaya');
+    assert.equal(updatedDetailsTrip.budget_paise, 10000000);
+
     // 5. Non-creator/non-admin participant cannot update cover photo
     const forbiddenCoverRes = await fetch(`${baseUrl}/api/trips/${tripId}`, {
       method: 'PATCH',

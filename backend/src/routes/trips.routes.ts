@@ -284,7 +284,7 @@ tripsRouter.patch('/:tripId', requireAuth, requireTripAccess('tripId'), async (r
 
         for (const m of members) {
           const existing = await req.db.prepare(`
-            SELECT id FROM trip_participants WHERE trip_id = ? AND person_id = ?
+            SELECT person_id FROM trip_participants WHERE trip_id = ? AND person_id = ?
           `).get(trip.id, m.person_id);
 
           if (!existing) {
@@ -309,7 +309,7 @@ tripsRouter.patch('/:tripId', requireAuth, requireTripAccess('tripId'), async (r
     if (data.participant_person_ids && data.participant_person_ids.length > 0) {
       for (const personId of data.participant_person_ids) {
         const existing = await req.db.prepare(`
-          SELECT id FROM trip_participants WHERE trip_id = ? AND person_id = ?
+          SELECT person_id FROM trip_participants WHERE trip_id = ? AND person_id = ?
         `).get(trip.id, personId);
 
         if (!existing) {
